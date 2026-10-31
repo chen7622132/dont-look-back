@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="description" content="它一直在等一个人回头。" />
+<meta property="og:title" content="别回头" />
+<meta property="og:description" content="含突发惊吓与强光闪烁。" />
+<title>别回头</title>
+<link rel="stylesheet" href="style.css?v=1" />
+</head>
+<body>
+
+<div id="puppet">
+  <div class="breath">
+    <div class="parallax">
+      <img class="layer face" src="img/clown.jpg" alt="" draggable="false" />
+      <img class="layer eyes" src="img/eyes.jpg" alt="" draggable="false" />
+      <div class="slices" id="slices"></div>
+      <div class="tear" id="tear"></div>
+    </div>
+  </div>
+</div>
+
+<canvas id="grain"></canvas>
+<div id="scan"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="blood"></div>
+
+<div id="dot"></div>
+
+<div id="end">
+  <p class="l1">它记住你了</p>
+  <p class="l2">你已经回头了</p>
+  <button id="again" type="button">再 看 一 次</button>
+  <p class="l3">含突发惊吓 · 强光闪烁 · 请勿给心脏不适者观看</p>
+</div>
+
+<button id="exit" type="button" aria-label="退出"></button>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>
