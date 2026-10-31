@@ -51,6 +51,7 @@ window.FX = (function () {
     'uniform float uUnder;',   // 底光强度
     'uniform vec4  uGrade;',      // x=饱和度 y=桶形畸变 z=高光提亮 w=颗粒
     'uniform vec3  uTint;',       // 整体色调
+    'uniform vec2  uPulse;',      // x=眼睛睁大 y=嘴角抽动
     'uniform float uTurn;',
     'uniform float uTilt;',
 
@@ -82,6 +83,21 @@ window.FX = (function () {
     // 伪 3D：仿射斜切，模拟甩头和仰头（一张图也能演）
     '  uv.x += uTurn * (uv.y - 0.5) * 0.42;',
     '  uv.y += uTilt * (uv.x - 0.5) * 0.28;',
+
+    // 局部脉冲：每隔一两秒，眼睛突然睁大一下 / 嘴角抽一下
+    '  if (uPulse.x > 0.01) {',
+    '    vec2 ec = vec2(0.5, 0.30);',
+    '    vec2 ed = uv - ec;',
+    '    float er = length(ed * vec2(aspect, 1.0));',
+    '    float em = smoothstep(0.40, 0.0, er) * uPulse.x;',
+    '    uv = mix(uv, ec + ed * 0.88, em);',
+    '  }',
+    '  if (uPulse.y > 0.01) {',
+    '    vec2 mc = vec2(0.5, 0.66);',
+    '    vec2 md = uv - mc;',
+    '    float mm = smoothstep(0.48, 0.0, length(md * vec2(aspect * 0.75, 1.7))) * uPulse.y;',
+    '    uv = mix(uv, mc + md * vec2(0.84, 1.0), mm);',
+    '  }',
 
     // 桶形畸变：像贴得太近的广角镜头
     '  vec2 lp = vUv - 0.5;',
@@ -187,7 +203,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint', 'uPulse']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -268,6 +284,8 @@ window.FX = (function () {
     lens: 0,
     hi: 0,
     tint: [1, 1, 1],
+    eyePulse: 0,
+    mouthPulse: 0,
     audio: 0,
     panX: 0,
     panY: 0,
@@ -294,6 +312,7 @@ window.FX = (function () {
     gl.uniform1f(U.uUnder, S.under);
     gl.uniform4f(U.uGrade, S.sat, S.lens, S.hi, S.grain);
     gl.uniform3f(U.uTint, S.tint[0], S.tint[1], S.tint[2]);
+    gl.uniform2f(U.uPulse, S.eyePulse, S.mouthPulse);
     gl.uniform1f(U.uTurn, S.turn);
     gl.uniform1f(U.uTilt, S.tilt);
     gl.uniform1f(U.uAudio, S.audio);
@@ -351,6 +370,8 @@ window.FX = (function () {
       S.lens = 0.20;               // 畸变收一半：有压迫感，但不至于"忙"
       S.hi = 0.06;                 // 高光几乎不加，多了就是塑料
       S.tint = [1.0, 1.0, 1.0];    // 不额外偏色 —— 小丑本身的配色已经是答案
+      S.eyePulse = 0;
+      S.mouthPulse = 0;
       S.grain = 0.055;
       S.audio = 0;
       S.panX = 0;
@@ -380,6 +401,10 @@ window.FX = (function () {
           S.rgb = k * 0.002;
           S.tear = 0; S.kaleido = 0; S.shatter = 0;
           S.flash = 1.05 + Math.sin(t * 26) * 0.015;
+          // 干净的那几帧里也会突然变一下 —— 你不敢确定自己看错了没有
+          var st0 = Math.floor(t * 16);
+          S.eyePulse = rnd(st0 * 2.3) > 0.80 ? 1 : 0;
+          S.mouthPulse = rnd(st0 * 4.1 + 7) > 0.88 ? 1 : 0;
         } else if (u < 0.42) {
           k = (u - 0.17) / 0.25;
           S.warp = 0.03 + k * 0.11;
@@ -413,6 +438,9 @@ window.FX = (function () {
           var stp = Math.floor(t * 11);
           S.turn = (rnd(stp) - 0.5) * 1.5;
           S.tilt = (rnd(stp + 7.7) - 0.5) * 0.9;
+          // 表情抽动：每 71ms 掷一次骰子，眼睛和嘴角各约 8%
+          S.eyePulse = rnd(stp * 3.1) > 0.92 ? 1 : 0;
+          S.mouthPulse = rnd(stp * 5.7 + 11) > 0.93 ? 1 : 0;
         } else if (u < 0.97) {
           // 骤停：全部归零，只剩一张干净的脸瞪着镜头
           S.kaleido = 0; S.shatter = 0; S.turn = 0; S.tilt = 0;
