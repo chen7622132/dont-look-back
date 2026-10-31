@@ -21,6 +21,9 @@
   var endEl = $('#end');
   var exitBtn = $('#exit');
   var againBtn = $('#again');
+  var knowEl = $('#know');
+  var crashEl = $('#crash');
+  var crashLog = $('#crashlog');
 
   var R = {
     tension: 0,
@@ -217,7 +220,16 @@
       var self = this;
       var t = ctx.currentTime;
       var out = ctx.createGain();
-      out.connect(this.master);
+      // 立体声：尖叫从一只耳朵甩到另一只，戴着耳机的人会本能扭头
+      var pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (pan) {
+        pan.pan.setValueAtTime(Math.random() > 0.5 ? -1 : 1, t);
+        pan.pan.linearRampToValueAtTime(0, t + 0.14);
+        out.connect(pan);
+        pan.connect(this.master);
+      } else {
+        out.connect(this.master);
+      }
 
       // 1) 高频尖叫噪声（主体）
       var src = ctx.createBufferSource();
@@ -336,6 +348,62 @@
       ng.gain.exponentialRampToValueAtTime(0.0001, t0 + n * 0.1 + 0.18);
       ns.connect(nbp); nbp.connect(ng); ng.connect(master);
       ns.start(t0); ns.stop(t0 + n * 0.1 + 0.25);
+    },
+
+    /* 耳语：不是说话，是"有人在你耳边呼吸着说话" */
+    whisper: function (dur) {
+      var ctx = this.ctx;
+      if (!ctx || ctx.state !== 'running') return;
+      dur = dur || 3.0;
+      var t = ctx.currentTime;
+
+      var src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+
+      var bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1400;
+      bp.Q.value = 4;
+
+      var bp2 = ctx.createBiquadFilter();
+      bp2.type = 'peaking';
+      bp2.frequency.value = 2800;
+      bp2.gain.value = 9;
+
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.055, t + 0.7);
+      g.gain.setValueAtTime(0.055, t + dur - 0.9);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      // 4.6Hz 的音节断续 —— 听起来像在说话，但一个字也听不清
+      var lfo = ctx.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = 4.6;
+      var lfoG = ctx.createGain();
+      lfoG.gain.value = 0.042;
+      lfo.connect(lfoG);
+      lfoG.connect(g.gain);
+
+      var tail = g;
+      if (ctx.createStereoPanner) {
+        var pan = ctx.createStereoPanner();
+        var plfo = ctx.createOscillator();
+        plfo.frequency.value = 0.13;
+        var plg = ctx.createGain();
+        plg.gain.value = 0.85;
+        plfo.connect(plg);
+        plg.connect(pan.pan);
+        plfo.start(t); plfo.stop(t + dur);
+        g.connect(pan);
+        tail = pan;
+      }
+      tail.connect(this.master);
+
+      src.connect(bp); bp.connect(bp2); bp2.connect(g);
+      src.start(t); src.stop(t + dur);
+      lfo.start(t); lfo.stop(t + dur);
     }
   };
 
@@ -395,7 +463,7 @@
     return blackFrame().then(function () {
       var target = 1.62 * power;
       var fxOn = false;
-      if (useFX) fxOn = FX.start({ zoom: 1.0 }) !== false;
+      if (useFX) fxOn = FX.start({ zoom: 1.0 + (power - 1) * 0.55 }) !== false;
       if (fxOn) FX.madness({ spin: true });
 
       // 爆：几乎在同一帧内推满（WebGL 接管时 CSS 层让位）
@@ -502,6 +570,69 @@
     }, 6500 + Math.random() * 10500);
   }
 
+  /* ---------------- 它知道你是谁 ---------------- */
+  function knowYou() {
+    var d = new Date();
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    knowEl.querySelector('.k1').textContent =
+      (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日　' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    knowEl.querySelector('.k2').textContent =
+      SEEN > 0 ? '这是你第 ' + (SEEN + 1) + ' 次回来' : '第一次';
+    knowEl.querySelector('.k3').textContent = '你一个人在看。';
+
+    knowEl.classList.add('on');
+    audio.whisper(4.4);
+    later(function () { knowEl.querySelector('.k1').classList.add('show'); }, 150);
+    later(function () { knowEl.querySelector('.k2').classList.add('show'); }, 1150);
+    later(function () { knowEl.querySelector('.k3').classList.add('show'); }, 2150);
+  }
+
+  function endKnow() {
+    knowEl.classList.remove('on');
+    var ps = knowEl.querySelectorAll('p');
+    for (var i = 0; i < ps.length; i++) ps[i].classList.remove('show');
+  }
+
+  /* ---------------- 假崩溃：让它以为页面坏了 ---------------- */
+  var CRASH_LINES = [
+    '> renderer process lost',
+    '> pid 4981 terminated',
+    '> 0x0000 0x000F 0xDEAD 0x0000',
+    '> frame buffer: corrupted',
+    '> attempting recovery ....',
+    '> recovery failed'
+  ];
+
+  function crashOut() {
+    crashEl.classList.add('on');
+    crashEl.classList.remove('phase2');
+    document.body.classList.add('crashing');
+    crashLog.textContent = '';
+    audio.whisper(2.2);
+
+    var i = 0;
+    function tick() {
+      if (i >= CRASH_LINES.length) return;
+      crashLog.textContent += CRASH_LINES[i] + "\n";
+      i++;
+      later(tick, 80 + Math.random() * 110);
+    }
+    tick();
+
+    // 1.5 秒后翻脸：变成浏览器自己的崩溃页 —— 这一下最骗人
+    later(function () {
+      crashEl.classList.add('phase2');
+      document.body.classList.remove('crashing');
+    }, 1500);
+  }
+
+  function endCrash() {
+    crashEl.classList.remove('on');
+    crashEl.classList.remove('phase2');
+    document.body.classList.remove('crashing');
+    crashLog.textContent = '';
+  }
+
   /* ---------------- 颗粒 ---------------- */
   var gctx = grain.getContext('2d');
   var gw = 100, gh = 180;
@@ -591,12 +722,29 @@
   }
 
   /* ---------------- 输入 ---------------- */
+  var lastPt = { x: 0, y: 0, t: 0 };
+  var lastSwing = 0;
+
   function onMove(e) {
     var t = e.touches && e.touches[0] ? e.touches[0] : e;
     if (typeof t.clientX !== 'number') return;
     R.pointer.x = t.clientX / window.innerWidth;
     R.pointer.y = t.clientY / window.innerHeight;
     R.tension = Math.min(1, R.tension + 0.035);
+
+    // 桌面端没有"甩手机"，那就用"鼠标猛甩"顶替
+    var now = performance.now();
+    if (lastPt.t && now - lastPt.t < 140) {
+      var d = Math.hypot(t.clientX - lastPt.x, t.clientY - lastPt.y);
+      var v = d / (now - lastPt.t);            // px / ms
+      if (v > 2.3 && now - lastSwing > 2600 && !R.busy && !R.dead) {
+        lastSwing = now;
+        scare({ from: Math.random() > 0.5 ? 'left' : 'right', power: 1.06, hold: 520 });
+      }
+    }
+    lastPt.x = t.clientX;
+    lastPt.y = t.clientY;
+    lastPt.t = now;
   }
 
   var touched = false;
@@ -638,6 +786,11 @@
     if (R.dead) return;
     R.dead = true;
     clearAll();
+    if (knowEl) knowEl.classList.remove('on');
+    if (crashEl) {
+      crashEl.classList.remove('on');
+      document.body.classList.remove('crashing');
+    }
     blood.style.transition = 'opacity 1.4s ease';
     blood.style.opacity = '0';
     puppet.style.transition = 'opacity 1.6s ease';
@@ -685,9 +838,11 @@
     var fast = SEEN > 0;
     var T = fast
       ? { dotOn: 100, dotOff: 820, emerge: 420, awake: 820, push: 1150, cut: 1700,
-          scare1: 2050, pre2: 3200, gap2: 1050, hunt: 5200 }
+          scare1: 2050, pre2: 3200, gap2: 1050,
+          know: 5200, crash: 9200, final: 13300, hunt: 14800 }
       : { dotOn: 300, dotOff: 1480, emerge: 1350, awake: 1950, push: 2750, cut: 3700,
-          scare1: 4100, pre2: 5300, gap2: 1600, hunt: 8000 };
+          scare1: 4100, pre2: 5300, gap2: 1600,
+          know: 8700, crash: 12800, final: 16900, hunt: 18400 };
 
     // 引诱点：不是为了让你点，是为了让你凑近
     later(function () { dot.classList.add('on'); }, T.dotOn);
@@ -737,6 +892,32 @@
         scare({ from: 'right', power: 1.08, hold: 540 });
       }, T.gap2);
     }, T.pre2);
+
+    // 它知道你是谁、几点、第几次
+    later(function () {
+      if (R.dead) return;
+      knowYou();
+    }, T.know);
+
+    later(function () {
+      endKnow();
+    }, T.know + 3700);
+
+    // 假装坏了（这一段最贵：观众以为网站在崩溃，防备会完全放下）
+    later(function () {
+      if (R.dead) return;
+      crashOut();
+    }, T.crash);
+
+    later(function () {
+      endCrash();
+    }, T.crash + 4000);
+
+    // 最后一次，最狠的一次
+    later(function () {
+      if (R.dead) return;
+      scare({ from: 'center', power: 1.32, hold: 700 });
+    }, T.final);
 
     // 进入猎捕模式
     later(function () {
