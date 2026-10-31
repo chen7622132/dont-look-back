@@ -24,6 +24,7 @@
   var knowEl = $('#know');
   var crashEl = $('#crash');
   var crashLog = $('#crashlog');
+  var eyeShot = $('#eyeShot');
 
   var R = {
     tension: 0,
@@ -720,6 +721,21 @@
     for (var i = 0; i < ps.length; i++) ps[i].classList.remove('show');
   }
 
+  /* ---------------- 眼睛特写：先看见眼睛，再看见脸 ---------------- */
+  function eyeCut(ms) {
+    return new Promise(function (res) {
+      if (!eyeShot) { res(); return; }
+      eyeShot.classList.remove('on');
+      void eyeShot.offsetWidth;      // 重启动画
+      eyeShot.classList.add('on');
+      audio.whisper(0.5);
+      later(function () {
+        eyeShot.classList.remove('on');
+        later(res, 60);              // 留一帧黑，再做硬切
+      }, ms || 460);
+    });
+  }
+
   /* ---------------- 假崩溃：让它以为页面坏了 ---------------- */
   var CRASH_LINES = [
     '> renderer process lost',
@@ -775,8 +791,17 @@
     if (R.dead) return;
     later(function () {
       if (R.dead) return;
-      if (R.hunt && !R.busy && window.FX && FX.ok) {
-        FX.flashFrames(70);
+      if (R.hunt && !R.busy) {
+        if (Math.random() < 0.45 && eyeShot) {
+          eyeShot.classList.add('on');          // 90ms 的一双眼睛
+          eyeShot.style.transition = 'none';
+          later(function () {
+            eyeShot.classList.remove('on');
+            eyeShot.style.transition = '';
+          }, 90);
+        } else if (window.FX && FX.ok) {
+          FX.flashFrames(70);
+        }
       }
       scheduleFlash();
     }, 3200 + Math.random() * 5200);
@@ -936,6 +961,7 @@
     R.dead = true;
     clearAll();
     if (typeof audio !== 'undefined') audio.stopAmbient();
+    if (eyeShot) eyeShot.classList.remove('on');
     if (knowEl) knowEl.classList.remove('on');
     if (crashEl) {
       crashEl.classList.remove('on');
@@ -1066,7 +1092,11 @@
     // 最后一次，最狠的一次
     later(function () {
       if (R.dead) return;
-      scare({ from: 'center', power: 1.32, hold: 700 });
+      // 先让那双眼睛占满屏幕 0.46 秒 —— 你以为看清它了，然后才发现只是眼睛
+      eyeCut(460).then(function () {
+        if (R.dead) return;
+        scare({ from: 'center', power: 1.32, hold: 700 });
+      });
     }, T.final);
 
     // 进入猎捕模式
