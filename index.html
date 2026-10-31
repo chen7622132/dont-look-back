@@ -10,7 +10,7 @@
 <meta property="og:title" content="别回头" />
 <meta property="og:description" content="含突发惊吓与强光闪烁。" />
 <title>别回头</title>
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 <link rel="preload" as="image" href="img/clown.jpg" />
 </head>
 <body>
@@ -18,8 +18,14 @@
 <div id="puppet">
   <div class="breath">
     <div class="parallax">
-      <img class="layer face" src="img/clown.jpg" alt="" draggable="false" />
-      <img class="layer eyes" src="img/eyes.jpg" alt="" draggable="false" />
+      <picture>
+        <source media="(orientation: landscape)" srcset="img/clown_wide.jpg" />
+        <img class="layer face" src="img/clown.jpg" alt="" draggable="false" />
+      </picture>
+      <picture>
+        <source media="(orientation: landscape)" srcset="img/eyes_wide.jpg" />
+        <img class="layer eyes" src="img/eyes.jpg" alt="" draggable="false" />
+      </picture>
       <div class="slices" id="slices"></div>
       <div class="tear" id="tear"></div>
     </div>
@@ -34,6 +40,28 @@
 <div id="flash"></div>
 <div id="blood"></div>
 
+<div id="know">
+  <p class="k1"></p>
+  <p class="k2"></p>
+  <p class="k3"></p>
+</div>
+
+<div id="crash">
+  <pre id="crashlog"></pre>
+  <div class="snap">
+    <svg viewBox="0 0 24 24" width="82" height="82" aria-hidden="true">
+      <rect x="2.6" y="1.8" width="18.8" height="20.4" rx="2.6" fill="#dcdfe4" />
+      <circle cx="9.1" cy="9.9" r="1.4" fill="#fff" />
+      <circle cx="14.9" cy="9.9" r="1.4" fill="#fff" />
+      <path d="M8.3 15.2Q12 17.7 15.7 15.2" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" />
+    </svg>
+    <p class="ct">噢，崩溃啦！</p>
+    <p class="cs">显示此网页时出现问题。</p>
+    <p class="cc">错误代码：STATUS_BREAKPOINT</p>
+    <button class="cb" type="button">重新加载</button>
+  </div>
+</div>
+
 <div id="dot"></div>
 
 <div id="end">
@@ -45,7 +73,7 @@
 
 <button id="exit" type="button" aria-label="退出"></button>
 
-<script src="fx.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="fx.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
