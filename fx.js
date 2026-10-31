@@ -166,11 +166,17 @@ window.FX = (function () {
   var srcImg = document.querySelector('.layer.face');
 
   function uploadTexture() {
-    if (texReady || !srcImg || !srcImg.complete || !srcImg.naturalWidth) return;
+    if (texReady || !srcImg || !srcImg.complete || !srcImg.naturalWidth) return false;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, srcImg);
     texReady = true;
+    return true;
+  }
+
+  // 图片可能还没下载完，等它就绪再把纹理补上
+  if (srcImg && !srcImg.complete) {
+    srcImg.addEventListener('load', function () { uploadTexture(); });
   }
 
   var W = 0, H = 0;
@@ -260,6 +266,7 @@ window.FX = (function () {
       opt = opt || {};
       resize();
       uploadTexture();
+      if (!texReady) return false;        // 纹理没就绪就别接管，交给调用方降级
       S.active = true;
       S.start = performance.now();
       S.zoom = opt.zoom || 1.3;
@@ -275,6 +282,7 @@ window.FX = (function () {
       S.script = null;
       canvas.style.transition = 'opacity .06s linear';
       canvas.style.opacity = '1';
+      return true;
     },
 
     /* 疯狂时序：t 单位秒
