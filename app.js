@@ -631,7 +631,7 @@
         img.addEventListener('error', tick);
       }
     });
-    later(go, 2500);
+    later(go, 1400);
   }
 
   if (document.readyState === 'loading') {
