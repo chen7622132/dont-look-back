@@ -465,6 +465,49 @@ body.crashing #crash::after {
   pointer-events: none;
 }
 
+/* ============ 眼睛特写（先看见眼睛） ============ */
+
+#eyeShot {
+  position: fixed;
+  inset: 0;
+  z-index: 27;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .05s linear;
+  overflow: hidden;
+}
+
+#eyeShot.on { opacity: 1; }
+
+#eyeShot img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.18) brightness(.92) saturate(.9);
+  transform: scale(1);
+}
+
+#eyeShot.on img {
+  animation:
+    eyePush .72s cubic-bezier(.3,.1,.4,1) forwards,
+    eyeTwitch .46s steps(1) forwards;
+}
+
+@keyframes eyePush {
+  from { transform: scale(1); }
+  to   { transform: scale(1.16); }
+}
+
+/* 切全脸前 0.1 秒，瞳孔猛地一缩 —— 它发现你了 */
+@keyframes eyeTwitch {
+  0%, 70%  { filter: contrast(1.18) brightness(.92) saturate(.90); }
+  74%      { filter: contrast(1.55) brightness(1.30) saturate(1.15); }
+  78%, 100% { filter: contrast(1.18) brightness(.92) saturate(.90); }
+}
+
 /* ============ 引诱点 ============ */
 
 #dot {
