@@ -179,20 +179,32 @@ window.FX = (function () {
     srcImg.addEventListener('load', function () { uploadTexture(); });
   }
 
-  var W = 0, H = 0;
+  var W = 0, H = 0, texW = 0, texH = 0;
+
   function resize() {
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // 渲染降分辨率：手机够快，还自带一点胶片糊感
-    var w = Math.round(Math.min(window.innerWidth * dpr, 560));
+    // 渲染降分辨率：手机够快，还自带一点胶片糊感；桌面按屏幕来
+    var cap = window.innerWidth > 900 ? 1280 : 560;
+    var w = Math.round(Math.min(window.innerWidth * dpr, cap));
     var h = Math.round(w * (window.innerHeight / window.innerWidth));
-    if (w === W && h === H) return;
-    W = canvas.width = w;
-    H = canvas.height = h;
-    gl.viewport(0, 0, W, H);
-    gl.uniform2f(U.uRes, W, H);
+    if (w !== W || h !== H) {
+      W = canvas.width = w;
+      H = canvas.height = h;
+      gl.viewport(0, 0, W, H);
+      gl.uniform2f(U.uRes, W, H);
+    }
 
-    // cover：保持图片比例，多余的部分裁掉
-    var imgAsp = 0.5625;            // 720 x 1280
+    // 横竖屏切换会换图（picture 元素），纹理和取样比例都要跟着刷新
+    var iw = srcImg ? srcImg.naturalWidth : 0;
+    var ih = srcImg ? srcImg.naturalHeight : 0;
+    if (iw && ih && (iw !== texW || ih !== texH)) {
+      texW = iw;
+      texH = ih;
+      texReady = false;
+    }
+    if (!texReady) uploadTexture();
+
+    var imgAsp = (texW || 720) / (texH || 1280);
     var scrAsp = window.innerWidth / window.innerHeight;
     if (scrAsp < imgAsp) gl.uniform2f(U.uCover, scrAsp / imgAsp, 1.0);
     else gl.uniform2f(U.uCover, 1.0, imgAsp / scrAsp);
