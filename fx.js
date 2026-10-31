@@ -48,6 +48,9 @@ window.FX = (function () {
     'uniform vec2  uPan;',       // 画面偏移
     'uniform vec2  uRes;',
     'uniform vec2  uCover;',
+    'uniform float uUnder;',   // 底光强度
+    'uniform vec4  uGrade;',      // x=饱和度 y=桶形畸变 z=高光提亮 w=颗粒
+    'uniform vec3  uTint;',       // 整体色调
     'uniform float uTurn;',
     'uniform float uTilt;',
 
@@ -79,6 +82,12 @@ window.FX = (function () {
     // 伪 3D：仿射斜切，模拟甩头和仰头（一张图也能演）
     '  uv.x += uTurn * (uv.y - 0.5) * 0.42;',
     '  uv.y += uTilt * (uv.x - 0.5) * 0.28;',
+
+    // 桶形畸变：像贴得太近的广角镜头
+    '  vec2 lp = vUv - 0.5;',
+    '  float lr2 = dot(lp, lp);',
+    '  lp *= 1.0 + uGrade.y * lr2 * 1.1;',
+    '  uv += lp - (vUv - 0.5);',
 
     // 等比例裁切（模拟 object-fit: cover），否则脸会被横向压扁
     '  uv = (uv - 0.5) * uCover + 0.5;',
@@ -125,9 +134,21 @@ window.FX = (function () {
     '  float b = texture2D(uTex, uv - vec2(ch, 0.0)).b;',
     '  vec3 col = vec3(r, g, b);',
 
+    // 底光：下巴亮、额头沉进黑暗，阴影往上爬 —— 日光从不这样打
+    '  float ug = smoothstep(0.02, 0.98, vUv.y);',
+    '  float underMul = mix(1.58, 0.38, ug);',
+    '  col *= mix(1.0, underMul, uUnder);',
+
     // 偶发反相条带
     '  float bar = hash(vec2(floor(vUv.y * 90.0), seed * 1.7));',
     '  if (bar > 0.965) col = mix(col, vec3(1.0) - col, 0.75);',
+
+    // 色彩分级：降饱和 + 单一色偏，去 AI 味
+    '  float luma = dot(col, vec3(0.299, 0.587, 0.114));',
+    '  col = mix(vec3(luma), col, uGrade.x) * uTint;',
+
+    // 高光提亮：牙齿和眼白先亮起来
+    '  col += smoothstep(0.62, 0.98, luma) * uGrade.z;',
 
     '  col *= uFlash;',
     '  col += (noise(vUv * vec2(620.0 * aspect, 620.0)) - 0.5) * uGrain;',
@@ -166,7 +187,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -242,6 +263,11 @@ window.FX = (function () {
     shatter: 0,
     turn: 0,
     tilt: 0,
+    under: 0,
+    sat: 1.0,
+    lens: 0,
+    hi: 0,
+    tint: [1, 1, 1],
     audio: 0,
     panX: 0,
     panY: 0,
@@ -265,6 +291,9 @@ window.FX = (function () {
     gl.uniform1f(U.uGrain, S.grain);
     gl.uniform1f(U.uTear, S.tear);
     gl.uniform1f(U.uShatter, S.shatter);
+    gl.uniform1f(U.uUnder, S.under);
+    gl.uniform4f(U.uGrade, S.sat, S.lens, S.hi, S.grain);
+    gl.uniform3f(U.uTint, S.tint[0], S.tint[1], S.tint[2]);
     gl.uniform1f(U.uTurn, S.turn);
     gl.uniform1f(U.uTilt, S.tilt);
     gl.uniform1f(U.uAudio, S.audio);
@@ -316,9 +345,16 @@ window.FX = (function () {
       S.shatter = 0;
       S.turn = 0;
       S.tilt = 0;
+      // ---- R1~R7 迭代后的最终配比 ----
+      S.under = 1;                 // 底光：额头沉进黑暗，只有下巴和牙在亮
+      S.sat = 0.80;                // 只轻微降饱和：保住"白脸+血红"这个原配色
+      S.lens = 0.20;               // 畸变收一半：有压迫感，但不至于"忙"
+      S.hi = 0.06;                 // 高光几乎不加，多了就是塑料
+      S.tint = [1.0, 1.0, 1.0];    // 不额外偏色 —— 小丑本身的配色已经是答案
+      S.grain = 0.055;
       S.audio = 0;
       S.panX = 0;
-      S.panY = 0;
+      S.panY = 0.05;               // 画面略微上移，额头被切出框外
       S.script = null;
       canvas.style.transition = 'opacity .06s linear';
       canvas.style.opacity = '1';
@@ -413,6 +449,20 @@ window.FX = (function () {
         setTimeout(function () { S.active = false; }, 150);
       }, ms || 70);
       return true;
+    },
+
+    /* 供离线评测用：一次性设定所有视觉参数 */
+    setLook: function (o) {
+      if (!o) return;
+      if (o.under !== undefined) S.under = o.under;
+      if (o.sat !== undefined) S.sat = o.sat;
+      if (o.lens !== undefined) S.lens = o.lens;
+      if (o.hi !== undefined) S.hi = o.hi;
+      if (o.grain !== undefined) S.grain = o.grain;
+      if (o.tint) S.tint = o.tint;
+      if (o.zoom !== undefined) S.zoom = o.zoom;
+      if (o.panX !== undefined) S.panX = o.panX;
+      if (o.panY !== undefined) S.panY = o.panY;
     },
 
     audio: function (v) {
