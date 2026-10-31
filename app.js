@@ -464,7 +464,7 @@
       var target = 1.62 * power;
       var fxOn = false;
       if (useFX) fxOn = FX.start({ zoom: 1.0 + (power - 1) * 0.55 }) !== false;
-      if (fxOn) FX.madness({ spin: true });
+      if (fxOn) FX.madness({ spin: true, total: (hold + 320) / 1000 });
 
       // 爆：几乎在同一帧内推满（WebGL 接管时 CSS 层让位）
       puppet.classList.add('hit');
@@ -631,6 +631,18 @@
     crashEl.classList.remove('phase2');
     document.body.classList.remove('crashing');
     crashLog.textContent = '';
+  }
+
+  /* ---------------- 闪帧：人在暗处，忽然闪一下 ---------------- */
+  function scheduleFlash() {
+    if (R.dead) return;
+    later(function () {
+      if (R.dead) return;
+      if (R.hunt && !R.busy && window.FX && FX.ok) {
+        FX.flashFrames(70);
+      }
+      scheduleFlash();
+    }, 3200 + Math.random() * 5200);
   }
 
   /* ---------------- 颗粒 ---------------- */
@@ -927,6 +939,7 @@
       puppet.style.transition = '';
       drift();
       scheduleHunt();
+      scheduleFlash();
     }, T.hunt);
   }
 
