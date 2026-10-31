@@ -301,109 +301,74 @@
       }, 900);
     },
 
-    /* 癫狂的尖笑：一串越笑越高的短脉冲，像从喉咙里挤出来的 */
-    giggle: function () {
+    /* 狂笑：三层共振峰合成 —— 低沉的"嗬" + 中频的"哈哈" + 高频的尖笑 */
+    laugh: function (opt) {
       var ctx = this.ctx;
       if (!ctx || ctx.state !== 'running') return;
-      var master = this.master;
-      var n = 9 + Math.floor(Math.random() * 5);
-      var t0 = ctx.currentTime + 0.03;
-      var i, t, base, o, bp, g;
+      opt = opt || {};
+      var self = this;
+      var layers = opt.layers || [
+        { n: 5, pitch: 128, rate: 0.19, gain: 0.13 },
+        { n: 8, pitch: 205, rate: 0.135, gain: 0.15 },
+        { n: 13, pitch: 345, rate: 0.078, gain: 0.07 }
+      ];
+      var t0 = ctx.currentTime + 0.02;
+      var FORM = [[720, 1.0], [1200, 0.62], [2600, 0.32]];
+      var maxDur = 0;
 
-      for (i = 0; i < n; i++) {
-        t = t0 + i * (0.108 - i * 0.004);
-        base = 195 + i * 23 + Math.random() * 26;
+      layers.forEach(function (L) {
+        if (L.n * L.rate > maxDur) maxDur = L.n * L.rate;
+        for (var i = 0; i < L.n; i++) {
+          var t = t0 + i * L.rate;
+          var f0 = L.pitch * (1 + i * 0.055) * (0.94 + Math.random() * 0.12);
 
-        o = ctx.createOscillator();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(base, t);
-        o.frequency.exponentialRampToValueAtTime(base * 1.75, t + 0.045);
-        o.frequency.exponentialRampToValueAtTime(base * 0.95, t + 0.10);
+          var o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f0 * 0.82, t);
+          o.frequency.linearRampToValueAtTime(f0 * 1.18, t + 0.028);
+          o.frequency.linearRampToValueAtTime(f0 * 0.78, t + L.rate * 0.9);
 
-        bp = ctx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.setValueAtTime(base * 2.6, t);
-        bp.Q.value = 5.5;
+          var env = ctx.createGain();
+          env.gain.setValueAtTime(0.0001, t);
+          env.gain.linearRampToValueAtTime(L.gain, t + 0.013);
+          env.gain.exponentialRampToValueAtTime(0.0001, t + L.rate * 0.86);
 
-        g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.125, t + 0.012);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
+          FORM.forEach(function (F) {
+            var bp = ctx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = F[0];
+            bp.Q.value = 5.5;
+            var g = ctx.createGain();
+            g.gain.value = F[1];
+            o.connect(bp); bp.connect(g); g.connect(env);
+          });
+          env.connect(self.master);
+          o.start(t); o.stop(t + L.rate);
+        }
+      });
 
-        o.connect(bp); bp.connect(g); g.connect(master);
-        o.start(t); o.stop(t + 0.13);
-      }
-
-      // 气声：让笑有"呼吸"
+      // 气声：笑的时候那口气
       var ns = ctx.createBufferSource();
       ns.buffer = this.noise;
       ns.loop = true;
-      var nbp = ctx.createBiquadFilter();
-      nbp.type = 'bandpass';
-      nbp.frequency.value = 1850;
-      nbp.Q.value = 2.2;
+      var nb = ctx.createBiquadFilter();
+      nb.type = 'bandpass';
+      nb.frequency.value = 2100;
+      nb.Q.value = 1.6;
       var ng = ctx.createGain();
       ng.gain.setValueAtTime(0.0001, t0);
-      ng.gain.linearRampToValueAtTime(0.045, t0 + 0.06);
-      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + n * 0.1 + 0.18);
-      ns.connect(nbp); nbp.connect(ng); ng.connect(master);
-      ns.start(t0); ns.stop(t0 + n * 0.1 + 0.25);
-    },
+      ng.gain.linearRampToValueAtTime(0.032, t0 + 0.15);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + maxDur + 0.2);
+      ns.connect(nb); nb.connect(ng); ng.connect(this.master);
+      ns.start(t0); ns.stop(t0 + maxDur + 0.3);
 
-    /* 耳语：不是说话，是"有人在你耳边呼吸着说话" */
-    whisper: function (dur) {
-      var ctx = this.ctx;
-      if (!ctx || ctx.state !== 'running') return;
-      dur = dur || 3.0;
-      var t = ctx.currentTime;
-
-      var src = ctx.createBufferSource();
-      src.buffer = this.noise;
-      src.loop = true;
-
-      var bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 1400;
-      bp.Q.value = 4;
-
-      var bp2 = ctx.createBiquadFilter();
-      bp2.type = 'peaking';
-      bp2.frequency.value = 2800;
-      bp2.gain.value = 9;
-
-      var g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.055, t + 0.7);
-      g.gain.setValueAtTime(0.055, t + dur - 0.9);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-
-      // 4.6Hz 的音节断续 —— 听起来像在说话，但一个字也听不清
-      var lfo = ctx.createOscillator();
-      lfo.type = 'square';
-      lfo.frequency.value = 4.6;
-      var lfoG = ctx.createGain();
-      lfoG.gain.value = 0.042;
-      lfo.connect(lfoG);
-      lfoG.connect(g.gain);
-
-      var tail = g;
-      if (ctx.createStereoPanner) {
-        var pan = ctx.createStereoPanner();
-        var plfo = ctx.createOscillator();
-        plfo.frequency.value = 0.13;
-        var plg = ctx.createGain();
-        plg.gain.value = 0.85;
-        plfo.connect(plg);
-        plg.connect(pan.pan);
-        plfo.start(t); plfo.stop(t + dur);
-        g.connect(pan);
-        tail = pan;
-      }
-      tail.connect(this.master);
-
-      src.connect(bp); bp.connect(bp2); bp2.connect(g);
-      src.start(t); src.stop(t + dur);
-      lfo.start(t); lfo.stop(t + dur);
+      // 笑到一半被掐断：音频时钟上精准静音 45ms，像被掐住脖子
+      var cutT = t0 + Math.min(maxDur * 0.72, 0.95);
+      var mg = this.master.gain;
+      mg.setValueAtTime(0.42, cutT);
+      mg.linearRampToValueAtTime(0.0001, cutT + 0.04);
+      mg.setValueAtTime(0.0001, cutT + 0.11);
+      mg.linearRampToValueAtTime(0.42, cutT + 0.55);
     }
   };
 
@@ -500,7 +465,7 @@
       }, 70);
 
       audio.scare(power);
-      audio.giggle();          // 尖叫之后紧咬一口尖笑
+      audio.laugh();          // 尖叫之后紧咬一口尖笑
       vibrate(power);
 
       return wait(hold);
