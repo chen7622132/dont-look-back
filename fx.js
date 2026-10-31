@@ -77,8 +77,8 @@ window.FX = (function () {
     '  }',
 
     // 伪 3D：仿射斜切，模拟甩头和仰头（一张图也能演）
-    '  uv.x += uTurn * (uv.y - 0.5) * 0.55;',
-    '  uv.y += uTilt * (uv.x - 0.5) * 0.35;',
+    '  uv.x += uTurn * (uv.y - 0.5) * 0.42;',
+    '  uv.y += uTilt * (uv.x - 0.5) * 0.28;',
 
     // 等比例裁切（模拟 object-fit: cover），否则脸会被横向压扁
     '  uv = (uv - 0.5) * uCover + 0.5;',
@@ -365,7 +365,7 @@ window.FX = (function () {
           S.zoom = 1.0 + k * 0.04;
         } else if (u < 0.90) {
           k = (u - 0.66) / 0.24;
-          S.kaleido = 1.0;
+          S.kaleido = 0.55;          // 别加到满，留一点不对称，脸才认得出来
           S.shatter = 0.55 + k * 0.45;
           S.warp = 0.16 + Math.sin(t * 30) * 0.05;
           S.rgb = 0.013 + k * 0.012;
