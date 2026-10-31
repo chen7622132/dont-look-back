@@ -585,6 +585,11 @@
     setFace({ s: 1.04, tx: offX, ty: '0px', rot: '0deg', o: 0, br: 0.18 });
 
     return blackFrame().then(function () {
+      // 声音比画面早 40ms 起振：先听见，再看见 —— 这一下最难防
+      audio.scare(power);
+      audio.playLaugh(power);
+      return wait(40);
+    }).then(function () {
       var target = 1.62 * power;
       var fxOn = false;
       if (useFX) fxOn = FX.start({ zoom: 1.0 + (power - 1) * 0.55 }) !== false;
@@ -623,8 +628,6 @@
         blood.style.opacity = '0';
       }, 70);
 
-      audio.scare(power);
-      audio.playLaugh(power);  // 真实录音的三重笑声
       vibrate(power);
 
       return wait(hold);
