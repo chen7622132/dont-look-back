@@ -48,6 +48,8 @@ window.FX = (function () {
     'uniform vec2  uPan;',       // 画面偏移
     'uniform vec2  uRes;',
     'uniform vec2  uCover;',
+    'uniform float uTurn;',
+    'uniform float uTilt;',
 
     'float hash(vec2 p){',
     '  p = fract(p * vec2(123.34, 456.21));',
@@ -73,6 +75,10 @@ window.FX = (function () {
     '    float mx = (uv.x > 0.5) ? (1.0 - uv.x) : uv.x;',
     '    uv.x = mix(uv.x, mx, uKaleido);',
     '  }',
+
+    // 伪 3D：仿射斜切，模拟甩头和仰头（一张图也能演）
+    '  uv.x += uTurn * (uv.y - 0.5) * 0.55;',
+    '  uv.y += uTilt * (uv.x - 0.5) * 0.35;',
 
     // 等比例裁切（模拟 object-fit: cover），否则脸会被横向压扁
     '  uv = (uv - 0.5) * uCover + 0.5;',
@@ -160,7 +166,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -221,6 +227,8 @@ window.FX = (function () {
     else gl.uniform2f(U.uCover, 1.0, imgAsp / scrAsp);
   }
 
+  function rnd(n) { var x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
+
   var S = {
     active: false,
     start: 0,
@@ -232,6 +240,8 @@ window.FX = (function () {
     grain: 0.05,
     tear: 0,
     shatter: 0,
+    turn: 0,
+    tilt: 0,
     audio: 0,
     panX: 0,
     panY: 0,
@@ -255,6 +265,8 @@ window.FX = (function () {
     gl.uniform1f(U.uGrain, S.grain);
     gl.uniform1f(U.uTear, S.tear);
     gl.uniform1f(U.uShatter, S.shatter);
+    gl.uniform1f(U.uTurn, S.turn);
+    gl.uniform1f(U.uTilt, S.tilt);
     gl.uniform1f(U.uAudio, S.audio);
     gl.uniform2f(U.uPan, S.panX, S.panY);
 
@@ -302,6 +314,8 @@ window.FX = (function () {
       S.grain = 0.055;
       S.tear = 0;
       S.shatter = 0;
+      S.turn = 0;
+      S.tilt = 0;
       S.audio = 0;
       S.panX = 0;
       S.panY = 0;
@@ -342,6 +356,8 @@ window.FX = (function () {
           k = (u - 0.42) / 0.24;
           S.warp = 0.14;
           S.kaleido = 0.85 + k * 0.15;
+          S.turn = Math.sin(t * 26) * 0.25 * k;
+          S.tilt = Math.cos(t * 19) * 0.15 * k;
           S.shatter = k * 0.55;
           S.rgb = 0.007 + k * 0.006;
           S.tear = 0.3;
@@ -357,9 +373,13 @@ window.FX = (function () {
           S.zoom = 1.04 + k * 0.06;
           S.flash = 0.92 + Math.sin(t * 12) * 0.08;
           if (spin) S.panX = Math.sin(t * 11) * 0.01;
+          // 每 90ms 猛甩一次头，方向随机 —— 这才是"神经出问题"
+          var stp = Math.floor(t * 11);
+          S.turn = (rnd(stp) - 0.5) * 1.5;
+          S.tilt = (rnd(stp + 7.7) - 0.5) * 0.9;
         } else if (u < 0.97) {
           // 骤停：全部归零，只剩一张干净的脸瞪着镜头
-          S.kaleido = 0; S.shatter = 0;
+          S.kaleido = 0; S.shatter = 0; S.turn = 0; S.tilt = 0;
           S.warp *= 0.15; S.rgb = 0.002; S.tear = 0;
           S.flash = 1.14; S.panX = 0; S.zoom = 1.12;
         } else {
