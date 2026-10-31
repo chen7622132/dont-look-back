@@ -394,6 +394,9 @@
 
     return blackFrame().then(function () {
       var target = 1.62 * power;
+      var fxOn = false;
+      if (useFX) fxOn = FX.start({ zoom: 1.0 }) !== false;
+      if (fxOn) FX.madness({ spin: true });
 
       // 爆：几乎在同一帧内推满（WebGL 接管时 CSS 层让位）
       puppet.classList.add('hit');
@@ -403,18 +406,14 @@
         tx: '0px',
         ty: '-1%',
         rot: (Math.random() * 5 - 2.5).toFixed(2) + 'deg',
-        o: useFX ? 0 : 1,
+        o: fxOn ? 0 : 1,
         br: 1.12,
         con: 1.18,
         sat: 1.0
       });
       // 洁净才有压迫感：撕裂条只在更狠的那几下出现
       if (power > 1.05) buildSlices();
-
-      if (useFX) {
-        FX.start({ zoom: 1.0 });
-        FX.madness({ spin: true });
-      }
+      R.fxOn = fxOn;
 
       // 单帧反色：大脑还没反应过来，画面已经"错"了
       flash.classList.add('invert');
@@ -439,9 +438,9 @@
       return wait(hold);
     }).then(function () {
       // 黑一帧，藏住 WebGL 画面与 CSS 画面的接缝
-      return useFX ? blackFrame() : null;
+      return R.fxOn ? blackFrame() : null;
     }).then(function () {
-      if (useFX) {
+      if (R.fxOn) {
         FX.stop();
         flash.style.transition = 'opacity .22s ease-out';
         flash.style.opacity = '0';
