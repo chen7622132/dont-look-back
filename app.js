@@ -377,7 +377,7 @@
       var self = this;
       if (!this.ctx || this._laughLoading || this.laughBufs) return;
       this._laughLoading = true;
-      var files = ['audio/laugh_mid.mp3', 'audio/laugh_low.mp3', 'audio/laugh_high.mp3'];
+      var files = ['audio/laugh_mid.mp3', 'audio/laugh_low.mp3', 'audio/laugh_high.mp3', 'audio/laugh_long.mp3'];
       var bufs = [];
       var done = 0;
       files.forEach(function (f, i) {
@@ -385,11 +385,50 @@
           .then(function (r) { return r.arrayBuffer(); })
           .then(function (ab) { return self.ctx.decodeAudioData(ab); })
           .then(function (buf) {
-            bufs[i] = buf;
-            if (++done === files.length) self.laughBufs = bufs;
+            if (i < 3) {
+              bufs[i] = buf;
+              if (++done === 3) self.laughBufs = bufs;
+            } else {
+              self.laughLongBuf = buf;   // 16 秒版：给猎捕期做背景
+            }
           })
           .catch(function () { /* 静默失败，回落到合成音 */ });
       });
+    },
+
+    /* 背景里的长笑声：它一直在笑，只是你刚才没注意 */
+    startAmbientLaugh: function () {
+      var ctx = this.ctx;
+      if (!ctx || this._amb || !this.laughLongBuf) return;
+      var src = ctx.createBufferSource();
+      src.buffer = this.laughLongBuf;
+      src.loop = true;
+      var lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1700;          // 闷住，像从墙那边传过来
+      var g = ctx.createGain();
+      g.gain.value = 0.0001;
+      src.connect(lp);
+      lp.connect(g);
+      g.connect(this.master);
+      src.start();
+      this._amb = { src: src, gain: g };
+    },
+
+    pulseAmbient: function (level) {
+      if (!this._amb || !this.ctx) return;
+      var g = this._amb.gain.gain;
+      var now = this.ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(Math.max(0.0001, g.value), now);
+      g.linearRampToValueAtTime(level, now + 0.9);
+      g.linearRampToValueAtTime(0.0001, now + 3.6);
+    },
+
+    stopAmbient: function () {
+      if (!this._amb) return;
+      try { this._amb.src.stop(); } catch (e) {}
+      this._amb = null;
     },
 
     playLaugh: function (power) {
@@ -433,6 +472,62 @@
       mg.linearRampToValueAtTime(0.0001, cutT + 0.04);
       mg.setValueAtTime(0.0001, cutT + 0.11);
       mg.linearRampToValueAtTime(0.42, cutT + 0.55);
+    },
+
+    /* 耳语：不是说话，是"有人在你耳边呼吸着说话" */
+    whisper: function (dur) {
+      var ctx = this.ctx;
+      if (!ctx || ctx.state !== 'running') return;
+      dur = dur || 3.0;
+      var t = ctx.currentTime;
+
+      var src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+
+      var bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1400;
+      bp.Q.value = 4;
+
+      var bp2 = ctx.createBiquadFilter();
+      bp2.type = 'peaking';
+      bp2.frequency.value = 2800;
+      bp2.gain.value = 9;
+
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.055, t + 0.7);
+      g.gain.setValueAtTime(0.055, t + dur - 0.9);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      // 4.6Hz 的音节断续：听起来像在说话，但一个字也听不清
+      var lfo = ctx.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = 4.6;
+      var lfoG = ctx.createGain();
+      lfoG.gain.value = 0.042;
+      lfo.connect(lfoG);
+      lfoG.connect(g.gain);
+
+      var tail = g;
+      if (ctx.createStereoPanner) {
+        var pan = ctx.createStereoPanner();
+        var plfo = ctx.createOscillator();
+        plfo.frequency.value = 0.13;
+        var plg = ctx.createGain();
+        plg.gain.value = 0.85;
+        plfo.connect(plg);
+        plg.connect(pan.pan);
+        plfo.start(t); plfo.stop(t + dur);
+        g.connect(pan);
+        tail = pan;
+      }
+      tail.connect(this.master);
+
+      src.connect(bp); bp.connect(bp2); bp2.connect(g);
+      src.start(t); src.stop(t + dur);
+      lfo.start(t); lfo.stop(t + dur);
     }
   };
 
@@ -662,6 +757,16 @@
     crashLog.textContent = '';
   }
 
+  /* ---------------- 背景笑声的起伏 ---------------- */
+  function scheduleAmbient() {
+    if (R.dead) return;
+    later(function () {
+      if (R.dead) return;
+      if (R.hunt && !R.busy) audio.pulseAmbient(0.012 + Math.random() * 0.035);
+      scheduleAmbient();
+    }, 7000 + Math.random() * 9000);
+  }
+
   /* ---------------- 闪帧：人在暗处，忽然闪一下 ---------------- */
   function scheduleFlash() {
     if (R.dead) return;
@@ -827,6 +932,7 @@
     if (R.dead) return;
     R.dead = true;
     clearAll();
+    if (typeof audio !== 'undefined') audio.stopAmbient();
     if (knowEl) knowEl.classList.remove('on');
     if (crashEl) {
       crashEl.classList.remove('on');
@@ -969,6 +1075,8 @@
       drift();
       scheduleHunt();
       scheduleFlash();
+      audio.startAmbientLaugh();
+      scheduleAmbient();
     }, T.hunt);
   }
 
