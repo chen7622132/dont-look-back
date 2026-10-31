@@ -730,9 +730,10 @@
       eyeShot.classList.add('on');
       audio.whisper(0.5);
 
-      // 它会眨一次眼 —— 而且睁得比闭得慢
-      later(function () { eyeShot.classList.add('blinking'); }, 250);
-      later(function () { eyeShot.classList.remove('blinking'); }, 340);
+      // 前 0.7 秒一动不动、不眨眼 —— 不眨眼本身就是"非人"的信号
+      // 然后才眨一次，眨完继续死盯
+      later(function () { eyeShot.classList.add('blinking'); }, 700);
+      later(function () { eyeShot.classList.remove('blinking'); }, 790);
 
       later(function () {
         eyeShot.classList.remove('on');
@@ -1021,10 +1022,10 @@
     var T = fast
       ? { dotOn: 100, dotOff: 820, emerge: 420, awake: 820, push: 1150, cut: 1700,
           scare1: 2050, pre2: 3200, gap2: 1050,
-          know: 5200, crash: 9200, final: 13300, hunt: 14800 }
+          know: 5200, crash: 9200, final: 13300, hunt: 17200 }
       : { dotOn: 300, dotOff: 1480, emerge: 1350, awake: 1950, push: 2750, cut: 3700,
           scare1: 4100, pre2: 5300, gap2: 1600,
-          know: 8700, crash: 12800, final: 16900, hunt: 18400 };
+          know: 8700, crash: 12800, final: 16900, hunt: 20800 };
 
     // 引诱点：不是为了让你点，是为了让你凑近
     later(function () { dot.classList.add('on'); }, T.dotOn);
@@ -1099,7 +1100,7 @@
     later(function () {
       if (R.dead) return;
       // 先让那双眼睛占满屏幕 0.46 秒 —— 你以为看清它了，然后才发现只是眼睛
-      eyeCut(460).then(function () {
+      eyeCut(1500).then(function () {
         if (R.dead) return;
         scare({ from: 'center', power: 1.32, hold: 700 });
       });
