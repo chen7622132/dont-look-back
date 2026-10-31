@@ -43,6 +43,7 @@ window.FX = (function () {
     'uniform float uFlash;',     // 曝光
     'uniform float uGrain;',     // 颗粒
     'uniform float uTear;',      // 横向撕裂
+    'uniform float uShatter;',   // 碎片化
     'uniform float uAudio;',     // 音频能量 0..1
     'uniform vec2  uPan;',       // 画面偏移
     'uniform vec2  uRes;',
@@ -82,6 +83,16 @@ window.FX = (function () {
     '  vec2 w1 = vec2(noise(uv * 5.0 + vec2(t * 0.8, -t * 0.6)),',
     '                 noise(uv * 5.0 + vec2(-t * 0.5, t * 0.9) + 17.0)) - 0.5;',
     '  uv += w1 * amp;',
+
+    // 碎片化：整张脸被打碎成块，每块各走各的
+    '  if (uShatter > 0.01) {',
+    '    vec2 g = vec2(5.0, 9.0) * (0.4 + uShatter * 0.6);',
+    '    vec2 cell = floor(uv * g);',
+    '    float st = floor(t * 9.0);',
+    '    float r1 = hash(cell + st * 1.37);',
+    '    float r2 = hash(cell + 17.0 + st * 0.71);',
+    '    uv += (vec2(r1, r2) - 0.5) * 0.055 * uShatter;',
+    '  }',
 
     // 横向撕裂：按行跳
     '  float row = floor(uv.y * 38.0);',
@@ -149,7 +160,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uAudio', 'uPan', 'uRes', 'uCover']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -220,6 +231,7 @@ window.FX = (function () {
     flash: 1,
     grain: 0.05,
     tear: 0,
+    shatter: 0,
     audio: 0,
     panX: 0,
     panY: 0,
@@ -242,6 +254,7 @@ window.FX = (function () {
     gl.uniform1f(U.uFlash, S.flash);
     gl.uniform1f(U.uGrain, S.grain);
     gl.uniform1f(U.uTear, S.tear);
+    gl.uniform1f(U.uShatter, S.shatter);
     gl.uniform1f(U.uAudio, S.audio);
     gl.uniform2f(U.uPan, S.panX, S.panY);
 
@@ -288,6 +301,7 @@ window.FX = (function () {
       S.flash = opt.flash || 1.05;
       S.grain = 0.055;
       S.tear = 0;
+      S.shatter = 0;
       S.audio = 0;
       S.panX = 0;
       S.panY = 0;
@@ -306,44 +320,79 @@ window.FX = (function () {
     madness: function (opts) {
       opts = opts || {};
       var spin = opts.spin !== false;
+      var total = opts.total || 0.9;
       S.script = function (t) {
+        var u = Math.min(1, t / total);   // 归一化：无论多长都完整走一遍
         var k;
-        if (t < 0.18) {
-          S.warp = t / 0.18 * 0.035;
-          S.rgb = t / 0.18 * 0.0025;
-          S.tear = 0;
-          S.kaleido = 0;
+        if (u < 0.17) {
+          k = u / 0.17;
+          S.warp = k * 0.03;
+          S.rgb = k * 0.002;
+          S.tear = 0; S.kaleido = 0; S.shatter = 0;
           S.flash = 1.05 + Math.sin(t * 26) * 0.015;
-        } else if (t < 0.42) {
-          k = (t - 0.18) / 0.24;
+        } else if (u < 0.42) {
+          k = (u - 0.17) / 0.25;
           S.warp = 0.03 + k * 0.11;
-          S.rgb = 0.0025 + k * 0.0055;
-          S.tear = k * 0.45;
-          S.flash = 1.05 - k * 0.08;
-        } else if (t < 0.80) {
-          k = (t - 0.42) / 0.38;
-          S.kaleido = 0.6 + k * 0.4;                  // 0.6 → 1.0：逐步变成完美对称的脸
-          S.warp = 0.14 + Math.sin(t * 22) * 0.03;
-          S.rgb = 0.008 + k * 0.004;
-          S.tear = 0.85 * (1.0 - k * 0.55);   // 后期收敛，把那张完美的对称脸露出来
-          S.zoom = 1.0 + k * 0.1;
-          S.flash = 0.95 + Math.sin(t * 12) * 0.07;   // 1.9Hz，压在光敏安全线以下
-          if (spin) S.panX = Math.sin(t * 9) * 0.008;
-        } else if (t < 0.88) {
-          // 骤停：一秒之内全部归零，只留一张干净的脸
-          S.kaleido = 0;
-          S.warp *= 0.2;
-          S.rgb = 0.002;
-          S.tear = 0;
-          S.flash = 1.12;
-          S.panX = 0;
-          S.zoom = 1.14;
+          S.kaleido = k * 0.85;
+          S.rgb = 0.002 + k * 0.005;
+          S.shatter = 0;
+          S.tear = k * 0.3;
+          S.flash = 1.05 - k * 0.07;
+        } else if (u < 0.66) {
+          k = (u - 0.42) / 0.24;
+          S.warp = 0.14;
+          S.kaleido = 0.85 + k * 0.15;
+          S.shatter = k * 0.55;
+          S.rgb = 0.007 + k * 0.006;
+          S.tear = 0.3;
+          S.flash = 0.98;
+          S.zoom = 1.0 + k * 0.04;
+        } else if (u < 0.90) {
+          k = (u - 0.66) / 0.24;
+          S.kaleido = 1.0;
+          S.shatter = 0.55 + k * 0.45;
+          S.warp = 0.16 + Math.sin(t * 30) * 0.05;
+          S.rgb = 0.013 + k * 0.012;
+          S.tear = 0.7;
+          S.zoom = 1.04 + k * 0.06;
+          S.flash = 0.92 + Math.sin(t * 12) * 0.08;
+          if (spin) S.panX = Math.sin(t * 11) * 0.01;
+        } else if (u < 0.97) {
+          // 骤停：全部归零，只剩一张干净的脸瞪着镜头
+          S.kaleido = 0; S.shatter = 0;
+          S.warp *= 0.15; S.rgb = 0.002; S.tear = 0;
+          S.flash = 1.14; S.panX = 0; S.zoom = 1.12;
         } else {
-          S.warp *= 0.85;
-          S.rgb *= 0.8;
-          S.flash = 1.05;
+          S.warp *= 0.85; S.rgb *= 0.8; S.flash = 1.05;
         }
       };
+    },
+
+    /* 闪帧：70ms 的极端画面。人几乎看不见，但会莫名心悸 —— 电影里最阴的一招 */
+    flashFrames: function (ms) {
+      resize();
+      uploadTexture();
+      if (!texReady) return false;
+      S.active = true;
+      S.start = performance.now();
+      S.zoom = 1.12;
+      S.warp = 0.45;
+      S.rgb = 0.035;
+      S.kaleido = 1.0;
+      S.shatter = 0.9;
+      S.flash = 1.45;
+      S.grain = 0.12;
+      S.tear = 1.0;
+      S.audio = 0;
+      S.script = null;
+      canvas.style.transition = 'none';
+      canvas.style.opacity = '1';
+      setTimeout(function () {
+        canvas.style.transition = 'opacity .12s linear';
+        canvas.style.opacity = '0';
+        setTimeout(function () { S.active = false; }, 150);
+      }, ms || 70);
+      return true;
     },
 
     audio: function (v) {
