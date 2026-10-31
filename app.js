@@ -729,8 +729,14 @@
       void eyeShot.offsetWidth;      // 重启动画
       eyeShot.classList.add('on');
       audio.whisper(0.5);
+
+      // 它会眨一次眼 —— 而且睁得比闭得慢
+      later(function () { eyeShot.classList.add('blinking'); }, 250);
+      later(function () { eyeShot.classList.remove('blinking'); }, 340);
+
       later(function () {
         eyeShot.classList.remove('on');
+        eyeShot.classList.remove('blinking');
         later(res, 60);              // 留一帧黑，再做硬切
       }, ms || 460);
     });
