@@ -109,6 +109,13 @@ body {
   -webkit-user-drag: none;
 }
 
+/* 横屏：换的是宽银幕那张图，眼睛和嘴都得在框里 */
+@media (orientation: landscape) {
+  .layer {
+    object-position: 50% 46%;
+  }
+}
+
 /* 只有眼睛在发光 */
 .layer.eyes {
   mix-blend-mode: screen;
@@ -308,6 +315,154 @@ body.lowpower #fx {
 
 body.lowpower #puppet {
   will-change: auto;
+}
+
+/* ============ 它知道 ============ */
+
+#know {
+  position: fixed;
+  inset: 0;
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+  background: #000;
+}
+
+#know.on { opacity: 1; }
+
+#know p {
+  margin: 0;
+  font-family: "Songti SC", "Noto Serif CJK SC", "STSong", serif;
+  color: #6d0f0f;
+  letter-spacing: .3em;
+  text-indent: .3em;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .9s ease, transform .9s ease;
+}
+
+#know p.show { opacity: 1; transform: none; }
+
+#know .k1 { font-size: 13px; color: #4a3a3a; }
+#know .k2 { font-size: 13px; color: #4a3a3a; }
+#know .k3 {
+  font-size: 22px;
+  color: #9b1414;
+  margin-top: 18px;
+  text-shadow: 0 0 24px rgba(130, 0, 0, .5);
+}
+
+/* ============ 假崩溃 ============ */
+
+#crash {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  display: none;
+  background: #000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#crash.on { display: block; }
+
+/* 第一段：坏掉的终端 */
+#crashlog {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 6vh 5vw;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 2;
+  color: #b9b9b9;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-shadow: 0 0 8px rgba(255, 255, 255, .35);
+  box-shadow: inset 0 0 140px 40px rgba(70, 0, 0, .55);
+  transition: opacity .2s linear;
+}
+
+#crash.phase2 #crashlog { opacity: 0; }
+
+@keyframes crShake {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-4px, 2px); }
+  50%  { transform: translate(3px, -3px); }
+  75%  { transform: translate(-2px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
+body.crashing #crash { animation: crShake .11s steps(2) infinite; }
+
+body.crashing #crash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, .055) 0 1px,
+    rgba(0, 0, 0, 0) 1px 4px
+  );
+}
+
+/* 第二段：假装这是浏览器自己的崩溃页 */
+#crash .snap {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background: #fff;
+  color: #5f6368;
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  text-align: center;
+  padding: 0 24px;
+}
+
+#crash.phase2 .snap { display: flex; }
+#crash.phase2 { animation: none; }
+
+#crash .snap .ct {
+  margin: 26px 0 0;
+  font-size: 22px;
+  font-weight: 400;
+  color: #202124;
+  letter-spacing: .02em;
+}
+
+#crash .snap .cs {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #5f6368;
+}
+
+#crash .snap .cc {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #9aa0a6;
+  letter-spacing: .02em;
+}
+
+#crash .snap .cb {
+  margin-top: 26px;
+  padding: 8px 22px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1a73e8;
+  background: #e8f0fe;
+  border: 0;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 /* ============ 引诱点 ============ */
