@@ -106,6 +106,7 @@
         this._beat = 0;
         this._heart();
       }
+      this.loadLaugh();   // 和解码不依赖播放状态，先下下来
       return this.ctx.state === 'running';
     },
 
@@ -369,6 +370,69 @@
       mg.linearRampToValueAtTime(0.0001, cutT + 0.04);
       mg.setValueAtTime(0.0001, cutT + 0.11);
       mg.linearRampToValueAtTime(0.42, cutT + 0.55);
+    },
+
+    /* 真实笑声录音（CC0）：三个声部同时播，像不止一个人在笑 */
+    loadLaugh: function () {
+      var self = this;
+      if (!this.ctx || this._laughLoading || this.laughBufs) return;
+      this._laughLoading = true;
+      var files = ['audio/laugh_mid.mp3', 'audio/laugh_low.mp3', 'audio/laugh_high.mp3'];
+      var bufs = [];
+      var done = 0;
+      files.forEach(function (f, i) {
+        fetch(f)
+          .then(function (r) { return r.arrayBuffer(); })
+          .then(function (ab) { return self.ctx.decodeAudioData(ab); })
+          .then(function (buf) {
+            bufs[i] = buf;
+            if (++done === files.length) self.laughBufs = bufs;
+          })
+          .catch(function () { /* 静默失败，回落到合成音 */ });
+      });
+    },
+
+    playLaugh: function (power) {
+      var ctx = this.ctx;
+      if (!ctx || ctx.state !== 'running') return;
+      if (!this.laughBufs) { this.laugh(); return; }   // 录音没就绪就先用合成的
+
+      var self = this;
+      var t = ctx.currentTime + 0.01;
+      var p = power || 1;
+      var cfg = [
+        { i: 0, gain: 0.85, delay: 0,    pan: -0.35 },
+        { i: 1, gain: 0.65, delay: 0.055, pan: 0.45 },
+        { i: 2, gain: 0.45, delay: 0.115, pan: 0.1 }
+      ];
+
+      cfg.forEach(function (c) {
+        var buf = self.laughBufs[c.i];
+        if (!buf) return;
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = 0.97 + Math.random() * 0.06;   // 每个声部微错开
+
+        var g = ctx.createGain();
+        g.gain.value = c.gain * 0.5 * p;
+
+        if (ctx.createStereoPanner) {
+          var pan = ctx.createStereoPanner();
+          pan.pan.value = c.pan;
+          src.connect(g); g.connect(pan); pan.connect(self.master);
+        } else {
+          src.connect(g); g.connect(self.master);
+        }
+        src.start(t + c.delay);
+      });
+
+      // 笑到一半被掐断：跟合成版一样的手感
+      var mg = this.master.gain;
+      var cutT = t + 1.15;
+      mg.setValueAtTime(0.42, cutT);
+      mg.linearRampToValueAtTime(0.0001, cutT + 0.04);
+      mg.setValueAtTime(0.0001, cutT + 0.11);
+      mg.linearRampToValueAtTime(0.42, cutT + 0.55);
     }
   };
 
@@ -465,7 +529,7 @@
       }, 70);
 
       audio.scare(power);
-      audio.laugh();          // 尖叫之后紧咬一口尖笑
+      audio.playLaugh(power);  // 真实录音的三重笑声
       vibrate(power);
 
       return wait(hold);
