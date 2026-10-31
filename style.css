@@ -492,8 +492,8 @@ body.crashing #crash::after {
 
 #eyeShot.on img {
   animation:
-    eyePush .72s cubic-bezier(.3,.1,.4,1) forwards,
-    eyeTwitch .46s steps(1) forwards;
+    eyePush 1.5s cubic-bezier(.5,.02,.7,.62) forwards,
+    eyeTwitch 1.5s steps(1) forwards;
 }
 
 /* 闭眼层：眨眼就是把它瞬间显示出来 */
@@ -510,15 +510,17 @@ body.crashing #crash::after {
 #eyeShot .blink { transition: opacity .04s linear; }
 
 @keyframes eyePush {
-  from { transform: scale(1); }
-  to   { transform: scale(1.16); }
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.05); }
+  80%  { transform: scale(1.09); }
+  100% { transform: scale(1.44); }
 }
 
-/* 切全脸前 0.1 秒，瞳孔猛地一缩 —— 它发现你了 */
+/* 猛推的那一下，瞳孔跟着一缩 —— 它发现你了 */
 @keyframes eyeTwitch {
-  0%, 70%  { filter: contrast(1.18) brightness(.92) saturate(.90); }
-  74%      { filter: contrast(1.55) brightness(1.30) saturate(1.15); }
-  78%, 100% { filter: contrast(1.18) brightness(.92) saturate(.90); }
+  0%, 74%   { filter: contrast(1.18) brightness(.92) saturate(.90); }
+  78%       { filter: contrast(1.60) brightness(1.35) saturate(1.20); }
+  82%, 100% { filter: contrast(1.18) brightness(.92) saturate(.90); }
 }
 
 /* ============ 引诱点 ============ */
