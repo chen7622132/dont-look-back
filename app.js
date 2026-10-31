@@ -617,6 +617,26 @@
   window.addEventListener('deviceorientation', onOrient, { passive: true });
   window.addEventListener('orientationchange', sizeGrain);
 
-  if (document.readyState === 'complete') boot();
-  else window.addEventListener('load', boot);
+  /* 不等 window.load：图片加载最多等 2.5 秒，剩下的交给黑屏兜着 */
+  function whenImagesReady(fn) {
+    var imgs = Array.prototype.slice.call(document.images);
+    var left = imgs.length, fired = false;
+    function go() { if (fired) return; fired = true; fn(); }
+    function tick() { left--; if (left <= 0) go(); }
+    if (!imgs.length) return go();
+    imgs.forEach(function (img) {
+      if (img.complete) tick();
+      else {
+        img.addEventListener('load', tick);
+        img.addEventListener('error', tick);
+      }
+    });
+    later(go, 2500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { whenImagesReady(boot); });
+  } else {
+    whenImagesReady(boot);
+  }
 })();
