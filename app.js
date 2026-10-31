@@ -63,7 +63,16 @@
 
   /* ---------------- 面部状态机 ---------------- */
   function setFace(o) {
-    for (var k in o) puppet.style.setProperty('--' + k, o[k]);
+    for (var k in o) {
+      if (k === 'br') continue;                 // 亮度改由 .dimmer 承担
+      puppet.style.setProperty('--' + k, o[k]);
+    }
+    if (o.br !== undefined) {
+      var dim = 1 - o.br;
+      if (dim < 0) dim = 0;
+      if (dim > 0.94) dim = 0.94;
+      puppet.style.setProperty('--dim', dim.toFixed(3));
+    }
   }
 
   /* ---------------- 音频引擎（纯合成，无外部文件） ---------------- */
@@ -157,6 +166,25 @@
       var g = master.gain;
       g.setValueAtTime(0.0001, ctx.currentTime);
       g.exponentialRampToValueAtTime(0.42, ctx.currentTime + 4.5);
+
+      // 音频能量分析：让画面跟着声音一起疯
+      var ana = ctx.createAnalyser();
+      ana.fftSize = 512;
+      ana.smoothingTimeConstant = 0.5;
+      this.analyser = ana;
+      this._abuf = new Uint8Array(ana.fftSize);
+      master.connect(ana);
+    },
+
+    energy: function () {
+      if (!this.analyser) return 0;
+      this.analyser.getByteTimeDomainData(this._abuf);
+      var sum = 0, n = this._abuf.length, i, v;
+      for (i = 0; i < n; i++) {
+        v = (this._abuf[i] - 128) / 128;
+        sum += v * v;
+      }
+      return Math.min(1, Math.sqrt(sum / n) * 3.4);
     },
 
     _heart: function () {
@@ -259,6 +287,55 @@
         o2.connect(gg); gg.connect(self.master);
         o2.start(tt); o2.stop(tt + 2.7);
       }, 900);
+    },
+
+    /* 癫狂的尖笑：一串越笑越高的短脉冲，像从喉咙里挤出来的 */
+    giggle: function () {
+      var ctx = this.ctx;
+      if (!ctx || ctx.state !== 'running') return;
+      var master = this.master;
+      var n = 9 + Math.floor(Math.random() * 5);
+      var t0 = ctx.currentTime + 0.03;
+      var i, t, base, o, bp, g;
+
+      for (i = 0; i < n; i++) {
+        t = t0 + i * (0.108 - i * 0.004);
+        base = 195 + i * 23 + Math.random() * 26;
+
+        o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(base, t);
+        o.frequency.exponentialRampToValueAtTime(base * 1.75, t + 0.045);
+        o.frequency.exponentialRampToValueAtTime(base * 0.95, t + 0.10);
+
+        bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(base * 2.6, t);
+        bp.Q.value = 5.5;
+
+        g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.125, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
+
+        o.connect(bp); bp.connect(g); g.connect(master);
+        o.start(t); o.stop(t + 0.13);
+      }
+
+      // 气声：让笑有"呼吸"
+      var ns = ctx.createBufferSource();
+      ns.buffer = this.noise;
+      ns.loop = true;
+      var nbp = ctx.createBiquadFilter();
+      nbp.type = 'bandpass';
+      nbp.frequency.value = 1850;
+      nbp.Q.value = 2.2;
+      var ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.linearRampToValueAtTime(0.045, t0 + 0.06);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + n * 0.1 + 0.18);
+      ns.connect(nbp); nbp.connect(ng); ng.connect(master);
+      ns.start(t0); ns.stop(t0 + n * 0.1 + 0.25);
     }
   };
 
@@ -304,6 +381,7 @@
     var from = opt.from || 'center';
     var power = opt.power || 1;
     var hold = opt.hold || 470;
+    var useFX = !!(window.FX && window.FX.ok);
 
     R.busy = true;
     document.body.classList.add('hit');
@@ -315,21 +393,28 @@
     setFace({ s: 1.04, tx: offX, ty: '0px', rot: '0deg', o: 0, br: 0.18 });
 
     return blackFrame().then(function () {
-      // 爆：几乎在同一帧内推满
+      var target = 1.62 * power;
+
+      // 爆：几乎在同一帧内推满（WebGL 接管时 CSS 层让位）
       puppet.classList.add('hit');
       void puppet.offsetWidth;
       setFace({
-        s: (1.62 * power).toFixed(3),
+        s: target.toFixed(3),
         tx: '0px',
         ty: '-1%',
         rot: (Math.random() * 5 - 2.5).toFixed(2) + 'deg',
-        o: 1,
+        o: useFX ? 0 : 1,
         br: 1.12,
         con: 1.18,
         sat: 1.0
       });
-      // 洁净才有压迫感：撕裂条只在更狠的那几下出现，第一次保持干净
+      // 洁净才有压迫感：撕裂条只在更狠的那几下出现
       if (power > 1.05) buildSlices();
+
+      if (useFX) {
+        FX.start({ zoom: 1.0 });
+        FX.madness({ spin: true });
+      }
 
       // 单帧反色：大脑还没反应过来，画面已经"错"了
       flash.classList.add('invert');
@@ -348,10 +433,19 @@
       }, 70);
 
       audio.scare(power);
+      audio.giggle();          // 尖叫之后紧咬一口尖笑
       vibrate(power);
 
       return wait(hold);
     }).then(function () {
+      // 黑一帧，藏住 WebGL 画面与 CSS 画面的接缝
+      return useFX ? blackFrame() : null;
+    }).then(function () {
+      if (useFX) {
+        FX.stop();
+        flash.style.transition = 'opacity .22s ease-out';
+        flash.style.opacity = '0';
+      }
       // 骤降：不是"关掉"，是沉回黑暗里（观众会继续盯着找它）
       puppet.classList.remove('hit');
       puppet.classList.add('retreat');
@@ -359,7 +453,7 @@
         s: 1.36, tx: '0px', ty: '0px', rot: '0deg',
         o: 0.18, br: 0.5, con: 1.12, sat: 0.85
       });
-      return wait(300);
+      return wait(310);
     }).then(function () {
       puppet.classList.remove('retreat');
       R.busy = false;
@@ -430,16 +524,58 @@
     gctx.putImageData(img, 0, 0);
   }
 
+  /* ---------------- 性能保护：撑不住就自己减效果 ---------------- */
+  var perf = { n: 0, t0: 0, slow: 0, off: false };
+
+  function watchPerf(now) {
+    if (perf.off) return;
+    if (location.search.indexOf('noperf=1') >= 0) return;
+    if (!perf.t0) { perf.t0 = now; return; }
+    perf.n++;
+    if (now - perf.t0 < 1500) return;
+
+    var fps = perf.n * 1000 / (now - perf.t0);
+    if (fps < 24) perf.slow++;
+    else perf.slow = Math.max(0, perf.slow - 1);
+
+    if (perf.slow >= 2) {
+      perf.off = true;
+      document.body.classList.add('lowpower');
+      if (window.FX && window.FX.ok) window.FX.disable();
+    }
+    perf.n = 0;
+    perf.t0 = now;
+  }
+
   /* ---------------- 主循环 ---------------- */
   var lastGrain = 0;
+  var lastEye = 0;
+  var eyeLayer = document.querySelector('.layer.eyes');
 
   function loop(now) {
     requestAnimationFrame(loop);
-    if (now - lastGrain > 52) {
+    watchPerf(now);
+    // 突脸期间不画颗粒（WebGL 那边已经在烧 GPU 了）
+    if (!R.busy && now - lastGrain > 68) {
       drawGrain();
       lastGrain = now;
     }
     R.tension *= 0.9965;
+
+    // 尖叫越大声，脸扭得越狠
+    if (R.busy && window.FX && window.FX.ok) {
+      FX.audio(audio.energy());
+    }
+
+    // 眼睛的呼吸：8Hz 更新，别用 CSS 动画（混合层每帧重算太贵）
+    if (eyeLayer && !R.hit && now - lastEye > 120) {
+      lastEye = now;
+      var base = puppet.classList.contains('awake') ? 0.62 : 0.34;
+      var v = base + Math.sin(now / 820) * base * 0.42;
+      if (v < 0) v = 0;
+      if (v > 1) v = 1;
+      eyeLayer.style.opacity = v.toFixed(2);
+    }
 
     if (!R.busy) {
       var px = 0, py = 0;
@@ -537,6 +673,14 @@
     sizeGrain();
     requestAnimationFrame(loop);
     audio.unlock();
+
+    // ?manual=1：只初始化不自动演出，供自动化测试单独驱动
+    if (location.search.indexOf('manual=1') >= 0) {
+      if (window.FX && window.FX.ok) FX.init();
+      return;
+    }
+
+    if (window.FX && window.FX.ok) later(function () { FX.init(); }, 700);
 
     // 它记得你来过几次：第二次之后，不再给你准备的时间
     var fast = SEEN > 0;
