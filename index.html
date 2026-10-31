@@ -10,7 +10,7 @@
 <meta property="og:title" content="别回头" />
 <meta property="og:description" content="含突发惊吓与强光闪烁。" />
 <title>别回头</title>
-<link rel="stylesheet" href="style.css?v=3" />
+<link rel="stylesheet" href="style.css?v=4" />
 <link rel="preload" as="image" href="img/clown.jpg" />
 </head>
 <body>
@@ -23,9 +23,11 @@
       <div class="slices" id="slices"></div>
       <div class="tear" id="tear"></div>
     </div>
+    <div class="dimmer" id="dimmer"></div>
   </div>
 </div>
 
+<canvas id="fx"></canvas>
 <canvas id="grain"></canvas>
 <div id="scan"></div>
 <div id="vignette"></div>
@@ -43,6 +45,7 @@
 
 <button id="exit" type="button" aria-label="退出"></button>
 
-<script src="app.js?v=3"></script>
+<script src="fx.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
