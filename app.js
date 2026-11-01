@@ -723,20 +723,27 @@
 
   /* ---------------- 眼睛特写：先看见眼睛，再看见脸 ---------------- */
   function eyeCut(ms) {
+    ms = ms || 1500;
     return new Promise(function (res) {
+      // 优先走 WebGL：把平面的眼睛当球转，才有 3D 感
+      if (window.FX && window.FX.ok && window.FX.eyeStart && window.FX.eyeStart(ms)) {
+        audio.whisper(0.5);
+        later(function () {
+          window.FX.eyeStop();
+          later(res, 70);
+        }, ms + 20);
+        return;
+      }
+      // WebGL 不可用时退回 CSS 层
       if (!eyeShot) { res(); return; }
       eyeShot.classList.remove('on');
-      void eyeShot.offsetWidth;      // 重启动画
+      void eyeShot.offsetWidth;
       eyeShot.classList.add('on');
       audio.whisper(0.5);
-
-      // 全程不眨眼 —— 不眨眼本身就是"非人"的信号
-
       later(function () {
         eyeShot.classList.remove('on');
-        eyeShot.classList.remove('blinking');
-        later(res, 60);              // 留一帧黑，再做硬切
-      }, ms || 460);
+        later(res, 60);
+      }, ms);
     });
   }
 
