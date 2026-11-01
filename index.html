@@ -10,7 +10,7 @@
 <meta property="og:title" content="别回头" />
 <meta property="og:description" content="含突发惊吓与强光闪烁。" />
 <title>别回头</title>
-<link rel="stylesheet" href="style.css?v=19" />
+<link rel="stylesheet" href="style.css?v=20" />
 <link rel="preload" as="image" href="img/clown.jpg" />
 </head>
 <body>
@@ -63,10 +63,17 @@
 </div>
 
 <div id="eyeShot">
-  <picture>
+  <picture class="base">
     <source media="(orientation: landscape)" srcset="img/eyes_close.jpg" />
     <img src="img/eyes_close_v.jpg" alt="" draggable="false" />
   </picture>
+  <!-- 单独一层：只有眼珠会动，脸不动 -->
+  <div class="pupils">
+    <picture>
+      <source media="(orientation: landscape)" srcset="img/eyes_close.jpg" />
+      <img src="img/eyes_close_v.jpg" alt="" draggable="false" />
+    </picture>
+  </div>
 </div>
 
 <div id="dot"></div>
@@ -80,7 +87,7 @@
 
 <button id="exit" type="button" aria-label="退出"></button>
 
-<script src="fx.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="fx.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
