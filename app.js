@@ -25,6 +25,7 @@
   var crashEl = $('#crash');
   var crashLog = $('#crashlog');
   var eyeShot = $('#eyeShot');
+  var tape = $('#tape');
 
   var R = {
     tension: 0,
@@ -138,7 +139,7 @@
 
       // ---- 次声级压迫（手机扬声器放不出 32Hz，靠 55Hz 的谐波占便宜）
       var dg = this.droneGain = ctx.createGain();
-      dg.gain.value = 0.16;
+      dg.gain.value = 0.0;   // 开场要"宁静"，恐怖底噪留到突变前才拉起来
       dg.connect(master);
 
       [55, 55.7].forEach(function (f) {
@@ -179,7 +180,7 @@
       // 缓慢升到可闻
       var g = master.gain;
       g.setValueAtTime(0.0001, ctx.currentTime);
-      g.exponentialRampToValueAtTime(0.42, ctx.currentTime + 4.5);
+      g.exponentialRampToValueAtTime(0.16, ctx.currentTime + 3.0);   // 开场是"一段普通录像"的音量，不是恐怖片
 
       // 音频能量分析：让画面跟着声音一起疯
       var ana = ctx.createAnalyser();
@@ -439,6 +440,31 @@
       if (!this._amb) return;
       try { this._amb.src.stop(); } catch (e) {}
       this._amb = null;
+    },
+
+    /* 室内环境音：空调的低频嗡鸣 + 一丝空气声。
+       开场伪装成普通录像时用它 —— 有声音才像"真的在放视频"，但这个声音不带任何威胁。 */
+    room: function () {
+      if (!this.ctx || !this.master || this.roomGain) return;
+      var ctx = this.ctx, t = ctx.currentTime;
+      var n = ctx.createBufferSource();
+      n.buffer = this.noise; n.loop = true;
+      var lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 430; lp.Q.value = 0.6;
+      var g = ctx.createGain(); g.gain.value = 0.0001;
+      n.connect(lp); lp.connect(g); g.connect(this.master);
+      n.start(t);
+      g.gain.exponentialRampToValueAtTime(0.055, t + 2.4);
+      this.roomGain = g;
+    },
+
+    // 把室内音压掉（突变那一刻）
+    roomOff: function () {
+      if (!this.ctx || !this.roomGain) return;
+      var g = this.roomGain.gain, t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0.0001, t + 0.06);
     },
 
     /* ---- 铺垫四件套 ---- */
@@ -1292,84 +1318,75 @@
     // 铺垫时间轴（单位 ms）
     // 相比旧版：第一次突脸从 3.4s 推到 14.3s；抽空后静默 3.3s 才炸；
     // 中间插两次假警报 + 一段负空间；低频在 20 秒里缓慢加深
+    // 开场改成"一段普通的家用录像"，所以时间轴按秒级走，不再有暗调铺垫
     var T = fast
-      ? { dotOn: 80, dotOff: 700, emerge: 350, awake: 700,
-          drone: 950, push: 1100,
-          false1: 2300, relief: 2550, false2: 3150, dark: 3550,
-          suck: 5100, scare1: 7100, pre2: 7900, gap2: 780,
-          know: 9300, crash: 11700, final: 14100, hunt: 16300 }
-      : { dotOn: 260, dotOff: 1250, emerge: 1120, awake: 1600,
-          drone: 1900, push: 2400,
-          false1: 5600, relief: 5900, false2: 7400, dark: 8200,
-          suck: 11000, scare1: 14300, pre2: 15500, gap2: 1300,
-          know: 18000, crash: 21400, final: 25000, hunt: 28300 };
+      ? { tapeOn: 60, roomIn: 320, stall1: 2100, something: 2650, stall2: 4200,
+          suck: 5300, scare1: 6250, pre2: 7000, gap2: 780,
+          know: 8500, crash: 10900, final: 13300, hunt: 15500 }
+      : { tapeOn: 220, roomIn: 750, stall1: 4300, something: 5300, stall2: 8300,
+          suck: 10100, scare1: 11400, pre2: 12500, gap2: 1300,
+          know: 14900, crash: 18300, final: 21900, hunt: 25200 };
 
-    // 引诱点：不是为了让你点，是为了让你凑近
-    later(function () { dot.classList.add('on'); }, T.dotOn);
-    later(function () { dot.classList.remove('on'); }, T.dotOff);
+    /* ---------- 开场：伪装成一段普通的家用录像 ----------
+       旧版一上来就是暗调小丑 + 诱导点，观众一眼就知道"这是恐怖页面"，防备全开。
+       现在先给 6~8 秒完全正常的东西：明亮的客厅、空调声、走秒的时间戳。
+       他会以为在看一段跟自己无关的录像 —— 那时候防备是最低的。 */
 
-    // 它已经在那儿了，只是太暗 —— 然后极慢地靠近
+    later(function () { if (tape) tape.classList.add('on'); }, T.tapeOn);
+
+    // 时间戳开始走秒，让它"像真的在录"
     later(function () {
-      puppet.style.transition = (fast ? 'transform 1.1s' : 'transform 1.9s') +
-        ' cubic-bezier(.3,.05,.4,1), opacity ' + (fast ? '1.1s' : '1.9s') +
-        ' ease, filter ' + (fast ? '1.1s' : '1.9s') + ' ease';
-      setFace({ o: 0.24, s: 1.07, br: 0.5, con: 1.1, sat: 0.8 });
-    }, T.emerge);
+      var tcEl = tape ? tape.querySelector('.tape-tc') : null;
+      if (!tcEl) return;
+      var sec = 7;
+      setInterval(function () {
+        sec++;
+        var mm = 32 + Math.floor(sec / 60), ss = sec % 60;
+        tcEl.textContent = '2026-11-01 14:' + (mm < 10 ? '0' + mm : mm) + ':' + (ss < 10 ? '0' + ss : ss);
+      }, 1000);
+    }, T.tapeOn + 500);
 
-    // 眼睛先醒过来
+    // 室内空调的低频嗡鸣。有声音才像"真的在放视频"，而且这个声音不带任何威胁
+    later(function () { audio.room(); }, T.roomIn);
+
+    // ---- 第一次卡顿：110ms。人的第一反应是"我网卡了"，而不是"这有鬼" ----
     later(function () {
-      puppet.classList.add('awake');
-    }, T.awake);
+      if (!tape) return;
+      tape.classList.add('stall');
+      later(function () {
+        tape.classList.remove('stall');
+        tape.classList.add('recovering');            // 恢复后的残留：比正常暗一点点
+        later(function () { tape.classList.remove('recovering'); }, 1100);
+      }, 110);
+    }, T.stall1);
 
-    // 它已经近到能看清了，可你还是没动
+    // 恢复之后，画面右侧的阴影里多了一点东西。不盯着看根本发现不了
+    later(function () { if (tape) tape.classList.add('something'); }, T.something);
+
+    // ---- 第二次卡顿：340ms，更久、更明显 ----
     later(function () {
-      puppet.style.transition = 'transform 2.6s cubic-bezier(.35,.05,.45,1), opacity 1.6s ease, filter 1.6s ease';
-      setFace({ o: 0.3, s: 1.2, br: 0.6 });
-    }, T.push);
+      if (!tape) return;
+      tape.classList.add('stall2');
+      audio.droneRamp(0.20, 3);        // 这时候才悄悄把低频拉起来一点
+      later(function () {
+        tape.classList.remove('stall2');
+        tape.classList.add('something2');   // 恢复时那个东西已经更清楚了
+        tape.classList.add('recovering');
+        later(function () { tape.classList.remove('recovering'); }, 1300);
+      }, 340);
+    }, T.stall2);
 
-    // 低频压迫开始加深：20 秒爬到 0.42，人察觉不到在变响，但身体会先反应
-    later(function () {
-      audio.droneRamp(0.42, 20);
-    }, T.drone);
-
-    // 假警报 A：灯闪一下。光有了，东西没有
-    later(function () {
-      falseAlarm('light');
-    }, T.false1);
-
-    // 虚假放松：声音回暖一点、脸退回去一点。
-    // 这一步不能省 —— 没有落差的假警报等于没做
-    later(function () {
-      if (R.dead || R.busy) return;
-      audio.sting(0.05);
-      puppet.classList.remove('awake');
-      puppet.style.transition = 'transform 1.2s ease, opacity .9s ease, filter .9s ease';
-      setFace({ o: 0.17, br: 0.29, s: 1.11, tx: '0px', ty: '0px', rot: '0deg' });
-    }, T.relief);
-
-    // 假警报 B：一角闪过半张脸，60ms 消失 —— 让人怀疑自己看错了
-    later(function () {
-      falseAlarm('peek');
-    }, T.false2);
-
-    // 负空间：几乎全黑，只剩一双眼睛在反光
-    later(function () {
-      darkEye();
-    }, T.dark);
-
-    // 抽空（静默剥夺）：25ms 把整条声音总线抽干，只留一线空气声。
-    // 硬切比渐弱可怕得多 —— 声音"被掐断"本身就是威胁信号
+    // 抽空：突然的、彻底的安静。房间声被掐断的那一下比尖叫更吓人
     later(function () {
       audio.suck();
-      heartVibe(3);              // 静默 3.3 秒里跳 3 下，正好把空档填满
-      puppet.classList.remove('awake');
-      puppet.style.transition = 'transform .45s ease, opacity .3s ease, filter .45s ease';
-      setFace({ o: 0.02, br: 0.12, s: 1.17 });
+      audio.roomOff();
+      heartVibe(2);
     }, T.suck);
 
     // 第一次
     later(function () {
       if (R.started) return;
+      if (tape) tape.classList.remove('on');   // 录像消失，由小丑接管这一帧
       puppet.style.transition = '';
       scare({ from: 'center', power: fast ? 1.12 : 1.0, hold: fast ? 620 : 500 });
     }, T.scare1);
