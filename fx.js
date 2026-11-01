@@ -366,6 +366,7 @@ window.FX = (function () {
     under: 0,
     eyeMode: 0,
     eyeDbg: 0,
+    lockGaze: 0,
     eyeDur: 1.5,
     gazeX: 0,
     gazeY: 0,
@@ -384,24 +385,28 @@ window.FX = (function () {
   var raf = 0;
 
   function draw(now) {
-    var elapsed = now - S.start;
+    var elapsed = performance.now() - S.start;   // 不用 rAF 的时间戳：某些环境(无头/降级渲染)会把它加速
     var t = elapsed / 1000;
 
     if (S.eyeMode) {
       var u = Math.min(1, t / S.eyeDur);
+      if (S.lockGaze) { S.tDbg = t; } else {
       // 推近：前 80% 极慢，最后 20% 猛冲
       S.zoom = u < 0.8 ? 1.0 + u * 0.1125 : 1.09 + ((u - 0.8) / 0.2) * 0.36;
       // 眼珠运动：死盯 → 猛然瞟开 → 更快地转回来死盯
       // 真实眼动是"跳视"（20-80ms 完成），不是慢速漂移；位移幅度必须够大才看得见
-      var m = elapsed, gx = 0, gy = 0;
-      if (m < 520) { gx = 0; gy = 0; }
-      else if (m < 600) { var p1 = (m - 520) / 80; p1 = p1 * p1 * (3 - 2 * p1); gx = -p1; gy = 0.35 * p1; }
-      else if (m < 930) { gx = -1; gy = 0.35; }
-      else if (m < 1000) { var q1 = (m - 930) / 70; q1 = q1 * q1 * (3 - 2 * q1); gx = -1 + q1; gy = 0.35 - 0.35 * q1; }
-      // 最后半秒死死盯着你，带高频微颤（狂躁感）
-      if (m >= 1000) { gx += (Math.random() - 0.5) * 0.06; gy += (Math.random() - 0.5) * 0.06; }
+      // 眼动用归一化进度 u（0~1），不写死秒数：这样改时长也照常播
+      // 0~35% 死盯（压迫感来自"不动"）→ 35% 猛瞟开 → 62% 更快转回来死盯
+      var sv = u, gx = 0, gy = 0;
+      if (sv < 0.35) { gx = 0; gy = 0; }
+      else if (sv < 0.40) { var p1 = (sv - 0.35) / 0.05; p1 = p1 * p1 * (3 - 2 * p1); gx = -p1; gy = 0.35 * p1; }
+      else if (sv < 0.62) { gx = -1; gy = 0.35; }
+      else if (sv < 0.67) { var q1 = (sv - 0.62) / 0.05; q1 = q1 * q1 * (3 - 2 * q1); gx = -1 + q1; gy = 0.35 - 0.35 * q1; }
+      if (sv >= 0.67) { gx += (Math.random() - 0.5) * 0.06; gy += (Math.random() - 0.5) * 0.06; }
+      S.tDbg = t;
       S.gazeX = gx;
       S.gazeY = gy;
+      }
     }
 
     if (S.script) S.script(t, elapsed);
@@ -612,8 +617,20 @@ window.FX = (function () {
       S.script = null;
       canvas.style.transition = 'opacity .05s linear';
       canvas.style.opacity = '1';
+      // 渲染循环可能还没起（还没走过一次普通突脸时），这里补起来，
+      // 否则 eyeMode 生效但 draw() 不跑，眼睛就完全静止 —— 这正是"眼睛没动"的根因之一
+      if (!raf) raf = requestAnimationFrame(frame);
       return true;
     },
+
+    __testLook: function (gx, gy, zoom) {
+      S.eyeMode = 1; S.active = true; S.lockGaze = 1;
+      S.gazeX = gx; S.gazeY = gy; S.zoom = (zoom === undefined ? 1.0 : zoom);
+      if (!raf) raf = requestAnimationFrame(frame);
+      return true;
+    },
+
+    state: function () { return { eyeMode: S.eyeMode, eyeDbg: S.eyeDbg, active: S.active, zoom: S.zoom, gazeX: S.gazeX, gazeY: S.gazeY, t: S.tDbg }; },
 
     eyeStop: function () {
       S.eyeMode = 0;
