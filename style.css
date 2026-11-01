@@ -481,46 +481,63 @@ body.crashing #crash::after {
 
 #eyeShot.on { opacity: 1; }
 
-#eyeShot img {
+#eyeShot picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+#eyeShot picture img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   filter: contrast(1.18) brightness(.85) saturate(.9);
-  transform: scale(1);
+  transform-origin: 50% 47%;
 }
 
-#eyeShot.on img {
+/* 下面这层只露出眼睛：脸不动，只有眼珠能挪 */
+#eyeShot .pupils {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: radial-gradient(ellipse 58% 30% at 50% 48%, #000 48%, rgba(0,0,0,.85) 72%, transparent 100%);
+  mask-image: radial-gradient(ellipse 58% 30% at 50% 48%, #000 48%, rgba(0,0,0,.85) 72%, transparent 100%);
+}
+
+/* 推近：前 1.2 秒几乎不动，最后 0.3 秒猛冲上来 */
+#eyeShot.on picture img {
+  animation: eyePush 1.5s cubic-bezier(.5,.02,.7,.62) forwards;
+}
+
+/* 眼珠：静止 → 突然瞟向左边 → 转回来盯着你 → 再瞟一下 */
+#eyeShot.on .pupils {
+  animation: eyeDart 1.5s linear forwards;
+}
+
+@keyframes eyePush {
+  0%   { transform: scale(1); }
+  80%  { transform: scale(1.09); }
+  100% { transform: scale(1.44); }
+}
+
+@keyframes eyeDart {
+  0%, 37%   { transform: translate(0, 0); }
+  40%       { transform: translate(-2.6%, 1.4%); }
+  52%       { transform: translate(-2.6%, 1.4%); }
+  55%       { transform: translate(0.2%, -0.2%); }
+  72%       { transform: translate(0, 0); }
+  77%       { transform: translate(1.9%, -1.0%); }
+  80%, 100% { transform: translate(0, 0); }
+}
+
+/* 猛推的那一下，瞳孔跟着一缩 —— 它发现你了 */
+#eyeShot.on picture img {
   animation:
     eyePush 1.5s cubic-bezier(.5,.02,.7,.62) forwards,
     eyeTwitch 1.5s steps(1) forwards;
 }
 
-/* 闭眼层：眨眼就是把它瞬间显示出来 */
-#eyeShot .blink {
-  opacity: 0;
-  z-index: 2;
-  animation: none !important;
-  filter: contrast(1.18) brightness(.85) saturate(.9) !important;
-}
-
-#eyeShot.blinking .blink { opacity: 1; }
-
-/* 眨眼之后，睁开得比闭上慢 —— 真人的眼皮就是这样 */
-#eyeShot .blink { transition: opacity .04s linear; }
-
-/* 前 1.2 秒几乎不动（只是极慢地靠近 + 眼珠轻微移了一下），最后 0.3 秒猛推上来 */
-@keyframes eyePush {
-  0%   { transform: scale(1) translate(0, 0); }
-  22%  { transform: scale(1.02) translate(-0.45%, 0.25%); }
-  40%  { transform: scale(1.035) translate(0.35%, -0.15%); }
-  58%  { transform: scale(1.05) translate(0, 0); }
-  80%  { transform: scale(1.09) translate(0, 0); }
-  100% { transform: scale(1.44) translate(0, 0); }
-}
-
-/* 猛推的那一下，瞳孔跟着一缩 —— 它发现你了 */
 @keyframes eyeTwitch {
   0%, 74%   { filter: contrast(1.18) brightness(.85) saturate(.90); }
   78%       { filter: contrast(1.60) brightness(1.28) saturate(1.20); }
