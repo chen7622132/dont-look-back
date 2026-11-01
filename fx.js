@@ -55,6 +55,7 @@ window.FX = (function () {
     'uniform sampler2D uEyeTex;',
     'uniform float uEyeMode;',
     'uniform vec2  uGaze;',
+    'uniform float uEyeDbg;',
     'uniform float uTurn;',
     'uniform float uTilt;',
 
@@ -77,21 +78,51 @@ window.FX = (function () {
     '  if (uEyeMode > 0.5) {',
     '    float easp = uRes.x / uRes.y;',
     '    vec2 uv0 = (vUv - 0.5) / uZoom + 0.5;',
-    '    vec2 rad = vec2(0.112, 0.112 * easp);',
-    '    vec2 cL = vec2(0.372, 0.466);',
-    '    vec2 cR = vec2(0.628, 0.466);',
-    '    vec2 dL = (uv0 - cL) / rad;',
-    '    vec2 dR = (uv0 - cR) / rad;',
-    '    float lL = length(dL);',
-    '    float lR = length(dR);',
-    '    vec2 suv = uv0;',
-    '    float zz = 0.0;',
-    '    float edge = 0.0;',
-    '    if (lL < 1.0) { float zA = sqrt(1.0 - lL * lL); suv = uv0 - uGaze * zA * rad; zz = zA; edge = lL; }',
-    '    else if (lR < 1.0) { float zB = sqrt(1.0 - lR * lR); suv = uv0 - uGaze * zB * rad; zz = zB; edge = lR; }',
-    '    vec3 ecol = texture2D(uEyeTex, suv).rgb;',
-    '    ecol += vec3(pow(zz, 26.0) * 0.14);',
-    '    ecol *= mix(1.0, 0.62, smoothstep(0.72, 1.0, edge));',
+    // ---- 修复1：眼睛图必须做 object-fit:cover 映射 ----
+    // 之前漏了这一步，整张图被拉伸铺满屏幕，圆虹膜被拉成椭圆，才是"球面错乱"的根子
+    '    bool wide = easp > 1.0;',
+    '    float imgAsp = wide ? 1.77778 : 0.5625;',
+    '    vec2 cov = (easp < imgAsp) ? vec2(easp / imgAsp, 1.0) : vec2(1.0, imgAsp / easp);',
+    '    uv0 = (uv0 - 0.5) * cov + 0.5;',
+    // ---- 修复2：虹膜位置用像素实测坐标（图片归一化）----
+    // 横版：左(0.282,0.576) 右(0.727,0.368)，两眼不在同一高度（歪头），半径0.070
+    // 竖版：单眼(0.199,0.550)，半径0.125
+    '    vec2 cL = wide ? vec2(0.269, 0.578) : vec2(0.199, 0.550);',
+    '    vec2 cR = wide ? vec2(0.740, 0.410) : vec2(-9.0, -9.0);',
+    '    float ri = wide ? 0.070 : 0.125;',
+    '    float rm = ri * 1.60;',
+    '    vec2 rr = vec2(rm, rm * imgAsp);',
+    // ---- 修复3：刚性平移，不是球面折射 ----
+    // 真实眼球转动的虹膜是整块平移（不拉伸），眼白基本不动；之前用 sqrt(1-l*l) 做球面
+    // 投影，等于把虹膜内部按深度拉伸，才会出现"眼中一块球面"
+    '    float mL = 1.0 - smoothstep(0.70, 1.0, length((uv0 - cL) / rr));',
+    '    float mR = 1.0 - smoothstep(0.70, 1.0, length((uv0 - cR) / rr));',
+    '    float m = max(mL, mR);',
+    // 靠近画面边缘时把 mask 衰减掉，否则 CLAMP_TO_EDGE 会把边缘像素拉成条纹
+    '    float ef = smoothstep(0.0, 0.035, uv0.x) * smoothstep(0.0, 0.035, 1.0 - uv0.x)',
+    '             * smoothstep(0.0, 0.035, uv0.y) * smoothstep(0.0, 0.035, 1.0 - uv0.y);',
+    '    mL *= ef;',
+    '    mR *= ef;',
+    // ---- 修复4：球面透视压缩 ----
+    // 虹膜是贴在眼球球面上的圆，转到侧面时会投影成椭圆（短轴 = 直径*cosθ）。
+    // 纯平移会像"贴纸在溜"，加上沿视线方向的压缩才有 3D 转动感
+    '    vec2 gdir = normalize(uGaze + vec2(1e-5, 0.0));',
+    '    float glen = min(1.0, length(uGaze));',
+    '    float sq = 0.17 * glen;',
+    '    vec2 off = uGaze * vec2(ri * 0.62, ri * 0.62 * imgAsp);',
+    '    vec3 ecol = texture2D(uEyeTex, uv0).rgb;',
+    '    if (mL > 0.002) {',
+    '      vec2 pL2 = (uv0 - cL) / rr;',
+    '      vec2 sL2 = pL2 + gdir * dot(pL2, gdir) * sq;',
+    '      ecol = mix(ecol, texture2D(uEyeTex, cL + sL2 * rr - off * mL).rgb, mL);',
+    '    }',
+    '    if (mR > 0.002) {',
+    '      vec2 pR2 = (uv0 - cR) / rr;',
+    '      vec2 sR2 = pR2 + gdir * dot(pR2, gdir) * sq;',
+    '      ecol = mix(ecol, texture2D(uEyeTex, cR + sR2 * rr - off * mR).rgb, mR);',
+    '    }',
+    '    if (uEyeDbg > 0.5) { gl_FragColor = vec4(m * 1.6, (1.0 - m) * 0.15, 0.0, 1.0); return; }',
+    '    ecol *= mix(1.0, 0.90, m);',
     '    gl_FragColor = vec4(max(ecol, 0.0), 1.0);',
     '    return;',
     '  }',
@@ -228,7 +259,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint', 'uPulse', 'uEyeTex', 'uEyeMode', 'uGaze']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint', 'uPulse', 'uEyeTex', 'uEyeMode', 'uGaze', 'uEyeDbg']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -334,6 +365,7 @@ window.FX = (function () {
     tilt: 0,
     under: 0,
     eyeMode: 0,
+    eyeDbg: 0,
     eyeDur: 1.5,
     gazeX: 0,
     gazeY: 0,
@@ -359,10 +391,15 @@ window.FX = (function () {
       var u = Math.min(1, t / S.eyeDur);
       // 推近：前 80% 极慢，最后 20% 猛冲
       S.zoom = u < 0.8 ? 1.0 + u * 0.1125 : 1.09 + ((u - 0.8) / 0.2) * 0.36;
-      // 眼珠：突然瞟走，再转回来盯你（硬跳，不做平滑）
-      var gx = 0, gy = 0;
-      if (u > 0.40 && u < 0.53) { gx = -0.30; gy = 0.16; }
-      else if (u > 0.75 && u < 0.81) { gx = 0.23; gy = -0.12; }
+      // 眼珠运动：死盯 → 猛然瞟开 → 更快地转回来死盯
+      // 真实眼动是"跳视"（20-80ms 完成），不是慢速漂移；位移幅度必须够大才看得见
+      var m = elapsed, gx = 0, gy = 0;
+      if (m < 520) { gx = 0; gy = 0; }
+      else if (m < 600) { var p1 = (m - 520) / 80; p1 = p1 * p1 * (3 - 2 * p1); gx = -p1; gy = 0.35 * p1; }
+      else if (m < 930) { gx = -1; gy = 0.35; }
+      else if (m < 1000) { var q1 = (m - 930) / 70; q1 = q1 * q1 * (3 - 2 * q1); gx = -1 + q1; gy = 0.35 - 0.35 * q1; }
+      // 最后半秒死死盯着你，带高频微颤（狂躁感）
+      if (m >= 1000) { gx += (Math.random() - 0.5) * 0.06; gy += (Math.random() - 0.5) * 0.06; }
       S.gazeX = gx;
       S.gazeY = gy;
     }
@@ -384,6 +421,7 @@ window.FX = (function () {
     gl.uniform2f(U.uPulse, S.eyePulse, S.mouthPulse);
     gl.uniform1f(U.uEyeMode, S.eyeMode);
     gl.uniform2f(U.uGaze, S.gazeX, S.gazeY);
+    gl.uniform1f(U.uEyeDbg, S.eyeDbg || 0);
     gl.uniform1i(U.uEyeTex, 1);
     gl.uniform1f(U.uTurn, S.turn);
     gl.uniform1f(U.uTilt, S.tilt);
@@ -596,6 +634,7 @@ window.FX = (function () {
       if (o.zoom !== undefined) S.zoom = o.zoom;
       if (o.panX !== undefined) S.panX = o.panX;
       if (o.panY !== undefined) S.panY = o.panY;
+      if (o.eyeDbg !== undefined) S.eyeDbg = o.eyeDbg;
     },
 
     audio: function (v) {
