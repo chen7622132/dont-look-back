@@ -331,7 +331,8 @@ body.lowpower #puppet {
   opacity: 0;
   pointer-events: none;
   transition: opacity 1.2s ease;
-  background: #000;
+  /* 不再整屏涂黑 —— 让黑暗里那张脸隐约透出来，它一直在这儿 */
+  background: radial-gradient(ellipse 70% 60% at 50% 42%, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .93) 60%, rgba(0, 0, 0, .97) 100%);
 }
 
 #know.on { opacity: 1; }
