@@ -730,10 +730,7 @@
       eyeShot.classList.add('on');
       audio.whisper(0.5);
 
-      // 前 0.7 秒一动不动、不眨眼 —— 不眨眼本身就是"非人"的信号
-      // 然后才眨一次，眨完继续死盯
-      later(function () { eyeShot.classList.add('blinking'); }, 700);
-      later(function () { eyeShot.classList.remove('blinking'); }, 790);
+      // 全程不眨眼 —— 不眨眼本身就是"非人"的信号
 
       later(function () {
         eyeShot.classList.remove('on');
