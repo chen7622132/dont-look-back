@@ -676,7 +676,7 @@
       puppet.style.transition = '';
       if (!R.busy) puppet.classList.add('awake');
     }, 20);
-    later(drift, 2800 + Math.random() * 3800);
+    later(drift, 1400 + Math.random() * 2000);
   }
 
   function scheduleHunt() {
@@ -695,7 +695,7 @@
         drift();
         scheduleHunt();
       });
-    }, 6500 + Math.random() * 10500);
+    }, 2200 + Math.random() * 3800);
   }
 
   /* ---------------- 它知道你是谁 ---------------- */
@@ -787,7 +787,7 @@
       if (R.dead) return;
       if (R.hunt && !R.busy) audio.pulseAmbient(0.012 + Math.random() * 0.035);
       scheduleAmbient();
-    }, 7000 + Math.random() * 9000);
+    }, 4200 + Math.random() * 5200);
   }
 
   /* ---------------- 闪帧：人在暗处，忽然闪一下 ---------------- */
@@ -808,7 +808,7 @@
         }
       }
       scheduleFlash();
-    }, 3200 + Math.random() * 5200);
+    }, 1600 + Math.random() * 2400);
   }
 
   /* ---------------- 颗粒 ---------------- */
