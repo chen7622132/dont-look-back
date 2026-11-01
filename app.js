@@ -792,6 +792,121 @@
   }
 
   /* ---------------- 猎捕模式：随机突袭 + 缓慢游移 ---------------- */
+  /* ---------------- 导演系统 ----------------
+     旧版的问题：猎捕期同时跑 4 个独立定时器（突脸 7.5~14.5s、假警报 3.2~5.8s、
+     闪帧 1.6~4s、背景笑 4.2~9.4s），叠加后平均每 1~2 秒就有一个事件 —— 观感必然是"频闪"。
+     机器越勤快，人越麻木：惊吓是消耗品，用一次敏感度就衰减一分。
+
+     改成 Left 4 Dead 的四阶段循环。核心不是"更多惊吓"，而是"更长��空白 + 更大的落差"：
+       RELAX  12~22s   什么都不发生（真的什么都不做，这是最难做到也最有效的一步）
+       BUILD  11~16s   四层逐级加码：低频 → 闪帧 → 假警报 → 抽空
+       SPIKE  1 次     在最安静的瞬间爆，不是在最吵的时候
+       FADE   3~5s     只留余韵
+     强度随循环递增，频率随循环递减 —— 越往后越稀、越狠。 */
+
+  var DIR = { cyc: 0, phase: 'idle' };
+
+  function director() {
+    if (R.dead || !R.hunt) return;
+    DIR.cyc++;
+    DIR.phase = 'relax';
+    var lvl = Math.min(1, (DIR.cyc - 1) / 4);
+
+    // 越轨：每 4 个循环来一次"不按套路"。
+    // 到第 4 轮时，观众已经摸清"静默 → 积累 → 爆"的节律，大脑开始提前准备；
+    // 那就在静默的第 3 秒直接爆，零铺垫 —— 这一次才是真正吓到人的那一次。
+    if (DIR.cyc % 4 === 0) {
+      later(function () {
+        if (R.dead || R.busy) return;
+        spike(1.0);
+      }, 2400 + Math.random() * 2400);
+      return;
+    }
+
+    // 第一次进猎捕时刚被最狠的一下炸过，先给个短缓冲；
+    // 之后是真正的长静默，而且越往后越长
+    // 每 3 个循环来一次"超长静默"：25~40 秒什么都不发生。
+    // 观众会以为体验结束了，然后它才动 —— 落差全在这里
+    var rest;
+    if (DIR.cyc === 1) rest = 5200;
+    else if (DIR.cyc % 3 === 0) rest = 25000 + Math.random() * 15000;
+    else rest = 12000 + lvl * 8000 + Math.random() * 5000;
+
+    later(function () {
+      if (R.dead || !R.hunt) return;
+      buildUp(lvl);
+    }, rest);
+  }
+
+  function buildUp(lvl) {
+    DIR.phase = 'build';
+    var total = 11000 + Math.random() * 5000;
+
+    // 底层：低频缓慢加深，观众察觉不到，但身体会先反应
+    audio.droneRamp(0.26 + lvl * 0.26, total / 1000);
+
+    // 1/4 处：一次闪帧。整段 BUILD 只此一次 —— 不连闪是"不频闪"的关键
+    later(function () {
+      if (R.dead || R.busy) return;
+      if (Math.random() < 0.55 && window.FX && FX.ok) FX.flashFrames(60);
+      else { puppet.classList.add('awake'); drift(); }
+    }, total * 0.26);
+
+    // 1/2 处：假警报。三种轮着来，不让观众摸到同一种
+    later(function () {
+      if (R.dead || R.busy) return;
+      falseAlarm(['peek', 'freeze', 'light'][DIR.cyc % 3]);
+    }, total * 0.52);
+
+    // 3/4 处：抽空。落差的全部重量都压在这之后的 2.5 秒里
+    later(function () {
+      if (R.dead) return;
+      audio.suck();
+      heartVibe(2);
+    }, total * 0.78);
+
+    // 峰值：在最安静的那一刻爆
+    later(function () {
+      if (R.dead) return;
+      spike(lvl);
+    }, total + 2500);
+  }
+
+  function spike(lvl) {
+    DIR.phase = 'spike';
+    var pool = ['center', 'left', 'right', 'center', 'left'];
+    scare({
+      from: pool[Math.floor(Math.random() * pool.length)],
+      power: 1.0 + lvl * 0.44,
+      hold: 430 + lvl * 230
+    }).then(function () {
+      if (R.dead) return;
+      DIR.phase = 'fade';
+      later(function () {
+        if (R.dead || !R.hunt) return;
+        audio.pulseAmbient(0.016 + lvl * 0.022);
+        director();
+      }, 3400 + Math.random() * 1800);
+    });
+  }
+
+  /* 静默期的"它在动"：只改位置、不制造声音，不算惊吓，但让人不敢移开视线 */
+  function idleDrift() {
+    if (R.dead || !R.hunt) return;
+    if (!R.busy && (DIR.phase === 'relax' || (DIR.phase === 'build' && Math.random() < 0.45))) {
+      puppet.classList.add('awake');
+      drift();
+    }
+    // 间隔用幂律而不是均匀分布：均匀随机会让间隔全部挤在平均值附近，
+    // 5.3、5.3、5.5、5.4 —— 这种"太均匀"本身就是规律。偶尔来一次 16~26 秒的超长静默，
+    // 让观众以为结束了，那才是落差。
+    var r = Math.random(), gap;
+    if (r < 0.72) gap = 3200 + Math.random() * 3000;
+    else if (r < 0.94) gap = 7000 + Math.random() * 6000;
+    else gap = 16000 + Math.random() * 10000;
+    later(idleDrift, gap);
+  }
+
   function drift() {
     if (!R.hunt || R.busy || R.dead) return;
     var x = (Math.random() * 2 - 1) * 5;
@@ -810,7 +925,8 @@
       puppet.style.transition = '';
       if (!R.busy) puppet.classList.add('awake');
     }, 20);
-    later(drift, 1400 + Math.random() * 2000);
+    // 不再自己递归：之前每 1.4~3.4 秒重跑一次、每次都在改明暗，
+    // 叠加眼睛层的正弦呼吸，观感就是"有规律的频闪"。节奏统一交给 idleDrift。
   }
 
   function scheduleHunt() {
@@ -1030,7 +1146,15 @@
     if (eyeLayer && !R.hit && now - lastEye > 120) {
       lastEye = now;
       var base = puppet.classList.contains('awake') ? 0.62 : 0.34;
-      var v = base + Math.sin(now / 820) * base * 0.42;
+      // 原来是 sin(now/820) 的连续呼吸 —— 正弦是最规律的波形，周期 5.15 秒，
+      // 一眼就能看出节律，这就是"频闪感"的一半来源。
+      // 改成：随机间隔的突发亮一下，间隔 2.5~7 秒，衰减无周期，另加一点微抖。
+      if (now > (R.eyeNext || 0)) {
+        R.eyeNext = now + 2500 + Math.random() * 4500;
+        R.eyeBurst = 1.0;
+      }
+      R.eyeBurst = (R.eyeBurst || 0) * 0.976;
+      var v = base * (0.70 + 0.52 * R.eyeBurst) + (Math.random() - 0.5) * 0.05;
       if (v < 0) v = 0;
       if (v > 1) v = 1;
       eyeLayer.style.opacity = v.toFixed(2);
@@ -1304,11 +1428,9 @@
       puppet.classList.add('awake');
       puppet.style.transition = '';
       drift();
-      scheduleHunt();
-      scheduleFeint();
-      scheduleFlash();
       audio.startAmbientLaugh();
-      scheduleAmbient();
+      director();        // 单一状态机接管后续一切节奏
+      idleDrift();
     }, T.hunt);
   }
 
