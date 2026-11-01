@@ -432,6 +432,55 @@
       this._amb = null;
     },
 
+    /* ---- 铺垫四件套 ---- */
+
+    // 低频压迫缓慢加深。20~30 秒内几乎察觉不到在变响，但身体会先反应过来
+    droneRamp: function (target, sec) {
+      if (!this.ctx || !this.droneGain) return;
+      var g = this.droneGain.gain, t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.max(0.0001, g.value), t);
+      g.exponentialRampToValueAtTime(Math.max(0.0001, target), t + (sec || 20));
+    },
+
+    // 假警报：一记短促的高频刺，90ms 收掉。不给实体，只给"刚才那是什么"
+    sting: function (level) {
+      if (!this.ctx || !this.master) return;
+      var ctx = this.ctx, t = ctx.currentTime;
+      var lv = (level === undefined) ? 0.20 : level;
+      var self = this;
+      [1240, 2610].forEach(function (f, i) {
+        var o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(f, t);
+        o.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.085);
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(lv / (i + 1.3), t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.095);
+        o.connect(g); g.connect(self.master);
+        o.start(t); o.stop(t + 0.11);
+      });
+    },
+
+    // 抽空：25ms 内把整条总线抽干，只剩一线空气声。比渐弱可怕得多
+    suck: function () {
+      if (!this.ctx || !this.master) return;
+      var g = this.master.gain, t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0.012, t + 0.025);
+    },
+
+    // 从抽空里回来。瞬间恢复（15ms）才不会吃掉尖叫的起音
+    revive: function (target, sec) {
+      if (!this.ctx || !this.master) return;
+      var g = this.master.gain, t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.max(0.0001, g.value), t);
+      g.exponentialRampToValueAtTime(target || 0.55, t + (sec || 0.015));
+    },
+
     playLaugh: function (power) {
       var ctx = this.ctx;
       if (!ctx || ctx.state !== 'running') return;
@@ -586,10 +635,13 @@
     setFace({ s: 1.04, tx: offX, ty: '0px', rot: '0deg', o: 0, br: 0.18 });
 
     return blackFrame().then(function () {
-      // 声音比画面早 40ms 起振：先听见，再看见 —— 这一下最难防
+      // 声音比画面早 140ms 起振。
+      // 依据：听觉刺激到脑 8~10ms、视觉 20~40ms，加上解码与渲染延迟，
+      // 140ms 能让身体先惊、眼睛后到 —— 这一下最难防。
+      audio.revive(0.58, 0.015);   // 从"抽空"状态瞬间回血，否则尖叫的起音被压掉
       audio.scare(power);
       audio.playLaugh(power);
-      return wait(40);
+      return wait(140);
     }).then(function () {
       var target = 1.62 * power;
       var fxOn = false;
@@ -651,10 +703,57 @@
       return wait(310);
     }).then(function () {
       puppet.classList.remove('retreat');
+      audio.revive(0.42, 0.8);     // 回落到常态电平，不然下一段铺垫没有对比空间
       R.busy = false;
       R.started = true;
       document.body.classList.remove('hit');
     });
+  }
+
+  /* ---------------- 假警报：虚惊一场，为真冲击铺路 ----------------
+     第一次"看起来要出事、结果没事"会让身体先进入戒备（心跳、呼吸变浅），
+     这种生理唤醒会迁移到下一次 —— 所以第二次哪怕刺激更小，反应也更大。
+     同时它会打掉"我摸清套路了"的自信。 */
+  function falseAlarm(kind) {
+    if (R.dead || R.busy) return;
+
+    if (kind === 'peek') {
+      // 只露半边、带一点拖影、65ms 就消失 —— 看见了，但说不清是什么。
+      // 关键是"糊"和"偏"：清晰的整脸那是真惊吓，不是假警报
+      audio.sting(0.28);
+      puppet.classList.add('awake');
+      puppet.classList.remove('retreat');
+      // 保留对比度、降饱和、加模糊 —— 整串写全，否则会覆盖掉 #puppet 的 contrast/saturate
+      puppet.style.filter = 'contrast(1.45) saturate(0.55) brightness(1.15) blur(1.8px)';
+      setFace({ o: 0.52, br: 0.58, s: 1.55, tx: '-36%', ty: '-6%', rot: '-9deg' });
+      later(function () {
+        if (R.dead) return;
+        puppet.style.filter = '';
+        puppet.classList.add('retreat');
+        setFace({ o: 0.15, br: 0.32, s: 1.18, tx: '0px', ty: '0px', rot: '0deg' });
+      }, 65);
+      return;
+    }
+
+    // 灯闪：光有了，东西没有。最便宜的假警报
+    audio.sting(0.15);
+    flash.style.transition = 'opacity .045s linear';
+    flash.style.opacity = '0.34';
+    later(function () {
+      flash.style.transition = 'opacity .3s ease-out';
+      flash.style.opacity = '0';
+    }, 75);
+  }
+
+  /* ---------------- 负空间：几乎全黑，只剩眼睛在反光 ----------------
+     给出 30%，剩下的 70% 由他自己补。人自己想象出来的永远比画出来的狠。 */
+  function darkEye() {
+    if (R.dead) return;
+    puppet.style.transition = 'transform 2.8s cubic-bezier(.4,.05,.5,1), opacity 1.6s ease, filter 1.6s ease';
+    puppet.classList.add('awake');
+    puppet.classList.remove('retreat');
+    // 偏出画框一点，让一只眼被边缘切掉 —— 对称的一双眼像装饰，只剩一只才像"它在看"
+    setFace({ o: 0.06, br: 0.035, s: 1.46, tx: '-11%', ty: '2%', rot: '-2deg', con: 1.22, sat: 0.68 });
   }
 
   /* ---------------- 猎捕模式：随机突袭 + 缓慢游移 ---------------- */
@@ -695,7 +794,7 @@
         drift();
         scheduleHunt();
       });
-    }, 2200 + Math.random() * 3800);
+    }, 7500 + Math.random() * 7000);   // 7.5~14.5 秒一次。太密会脱敏，第三次就变成笑点
   }
 
   /* ---------------- 它知道你是谁 ---------------- */
@@ -798,6 +897,16 @@
   }
 
   /* ---------------- 闪帧：人在暗处，忽然闪一下 ---------------- */
+  /* 猎捕期的"虚惊"：真突脸之间用假警报填空，既维持紧张又不把观众的钝化阈值打穿 */
+  function scheduleFeint() {
+    if (R.dead) return;
+    later(function () {
+      if (R.dead) return;
+      if (R.hunt && !R.busy) falseAlarm(Math.random() < 0.42 ? 'peek' : 'light');
+      scheduleFeint();
+    }, 3200 + Math.random() * 2600);
+  }
+
   function scheduleFlash() {
     if (R.dead) return;
     later(function () {
@@ -1023,13 +1132,20 @@
 
     // 它记得你来过几次：第二次之后，不再给你准备的时间
     var fast = SEEN > 0;
+    // 铺垫时间轴（单位 ms）
+    // 相比旧版：第一次突脸从 3.4s 推到 14.3s；抽空后静默 3.3s 才炸；
+    // 中间插两次假警报 + 一段负空间；低频在 20 秒里缓慢加深
     var T = fast
-      ? { dotOn: 80, dotOff: 700, emerge: 350, awake: 700, push: 980, cut: 1450,
-          scare1: 1750, pre2: 2750, gap2: 900,
-          know: 4300, crash: 7100, final: 10400, hunt: 13300 }
-      : { dotOn: 260, dotOff: 1250, emerge: 1120, awake: 1600, push: 2300, cut: 3080,
-          scare1: 3400, pre2: 4420, gap2: 1320,
-          know: 6750, crash: 9700, final: 13100, hunt: 15800 };
+      ? { dotOn: 80, dotOff: 700, emerge: 350, awake: 700,
+          drone: 950, push: 1100,
+          false1: 2300, relief: 2550, false2: 3150, dark: 3550,
+          suck: 5100, scare1: 7100, pre2: 7900, gap2: 780,
+          know: 9300, crash: 11700, final: 14100, hunt: 16300 }
+      : { dotOn: 260, dotOff: 1250, emerge: 1120, awake: 1600,
+          drone: 1900, push: 2400,
+          false1: 5600, relief: 5900, false2: 7400, dark: 8200,
+          suck: 11000, scare1: 14300, pre2: 15500, gap2: 1300,
+          know: 18000, crash: 21400, final: 25000, hunt: 28300 };
 
     // 引诱点：不是为了让你点，是为了让你凑近
     later(function () { dot.classList.add('on'); }, T.dotOn);
@@ -1054,12 +1170,44 @@
       setFace({ o: 0.3, s: 1.2, br: 0.6 });
     }, T.push);
 
-    // 抽走一切（静默剥夺）
+    // 低频压迫开始加深：20 秒爬到 0.42，人察觉不到在变响，但身体会先反应
     later(function () {
+      audio.droneRamp(0.42, 20);
+    }, T.drone);
+
+    // 假警报 A：灯闪一下。光有了，东西没有
+    later(function () {
+      falseAlarm('light');
+    }, T.false1);
+
+    // 虚假放松：声音回暖一点、脸退回去一点。
+    // 这一步不能省 —— 没有落差的假警报等于没做
+    later(function () {
+      if (R.dead || R.busy) return;
+      audio.sting(0.05);
+      puppet.classList.remove('awake');
+      puppet.style.transition = 'transform 1.2s ease, opacity .9s ease, filter .9s ease';
+      setFace({ o: 0.17, br: 0.29, s: 1.11, tx: '0px', ty: '0px', rot: '0deg' });
+    }, T.relief);
+
+    // 假警报 B：一角闪过半张脸，60ms 消失 —— 让人怀疑自己看错了
+    later(function () {
+      falseAlarm('peek');
+    }, T.false2);
+
+    // 负空间：几乎全黑，只剩一双眼睛在反光
+    later(function () {
+      darkEye();
+    }, T.dark);
+
+    // 抽空（静默剥夺）：25ms 把整条声音总线抽干，只留一线空气声。
+    // 硬切比渐弱可怕得多 —— 声音"被掐断"本身就是威胁信号
+    later(function () {
+      audio.suck();
       puppet.classList.remove('awake');
       puppet.style.transition = 'transform .45s ease, opacity .3s ease, filter .45s ease';
       setFace({ o: 0.02, br: 0.12, s: 1.17 });
-    }, T.cut);
+    }, T.suck);
 
     // 第一次
     later(function () {
@@ -1118,6 +1266,7 @@
       puppet.style.transition = '';
       drift();
       scheduleHunt();
+      scheduleFeint();
       scheduleFlash();
       audio.startAmbientLaugh();
       scheduleAmbient();
