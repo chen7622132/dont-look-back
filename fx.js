@@ -52,6 +52,9 @@ window.FX = (function () {
     'uniform vec4  uGrade;',      // x=饱和度 y=桶形畸变 z=高光提亮 w=颗粒
     'uniform vec3  uTint;',       // 整体色调
     'uniform vec2  uPulse;',      // x=眼睛睁大 y=嘴角抽动
+    'uniform sampler2D uEyeTex;',
+    'uniform float uEyeMode;',
+    'uniform vec2  uGaze;',
     'uniform float uTurn;',
     'uniform float uTilt;',
 
@@ -70,6 +73,28 @@ window.FX = (function () {
     '}',
 
     'void main(){',
+    // 眼睛模式：把平面的眼睛图当成两个球来转（位移 ∝ z：中心动得多，边缘几乎不动）
+    '  if (uEyeMode > 0.5) {',
+    '    float easp = uRes.x / uRes.y;',
+    '    vec2 uv0 = (vUv - 0.5) / uZoom + 0.5;',
+    '    vec2 rad = vec2(0.112, 0.112 * easp);',
+    '    vec2 cL = vec2(0.372, 0.466);',
+    '    vec2 cR = vec2(0.628, 0.466);',
+    '    vec2 dL = (uv0 - cL) / rad;',
+    '    vec2 dR = (uv0 - cR) / rad;',
+    '    float lL = length(dL);',
+    '    float lR = length(dR);',
+    '    vec2 suv = uv0;',
+    '    float zz = 0.0;',
+    '    float edge = 0.0;',
+    '    if (lL < 1.0) { float zA = sqrt(1.0 - lL * lL); suv = uv0 - uGaze * zA * rad; zz = zA; edge = lL; }',
+    '    else if (lR < 1.0) { float zB = sqrt(1.0 - lR * lR); suv = uv0 - uGaze * zB * rad; zz = zB; edge = lR; }',
+    '    vec3 ecol = texture2D(uEyeTex, suv).rgb;',
+    '    ecol += vec3(pow(zz, 26.0) * 0.14);',
+    '    ecol *= mix(1.0, 0.62, smoothstep(0.72, 1.0, edge));',
+    '    gl_FragColor = vec4(max(ecol, 0.0), 1.0);',
+    '    return;',
+    '  }',
     '  float aspect = uRes.x / uRes.y;',
     '  vec2 uv = (vUv - 0.5) / uZoom + 0.5 + uPan;',
 
@@ -203,7 +228,7 @@ window.FX = (function () {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
   var U = {};
-  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint', 'uPulse']
+  ['uTex', 'uTime', 'uWarp', 'uRGB', 'uKaleido', 'uZoom', 'uFlash', 'uGrain', 'uTear', 'uShatter', 'uAudio', 'uPan', 'uRes', 'uCover', 'uTurn', 'uTilt', 'uUnder', 'uGrade', 'uTint', 'uPulse', 'uEyeTex', 'uEyeMode', 'uGaze']
     .forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
 
   var tex = gl.createTexture();
@@ -215,6 +240,34 @@ window.FX = (function () {
   // 先填一张 1x1 黑，避免纹理未就绪
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0]));
   gl.uniform1i(U.uTex, 0);
+
+  // 第二张纹理：眼睛特写（横竖屏各一张，取当前显示的那张）
+  var texEye = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, texEye);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([0,0,0]));
+  gl.activeTexture(gl.TEXTURE0);
+  var eyeImg = document.querySelector('#eyeShot picture.base img');
+  var eyeTexReady = false, eyeTexW = 0, eyeTexH = 0;
+
+  function uploadEye() {
+    if (!eyeImg) return false;
+    if (eyeImg.naturalWidth && (eyeImg.naturalWidth !== eyeTexW || eyeImg.naturalHeight !== eyeTexH)) {
+      eyeTexW = eyeImg.naturalWidth; eyeTexH = eyeImg.naturalHeight; eyeTexReady = false;
+    }
+    if (eyeTexReady || !eyeImg.complete || !eyeImg.naturalWidth) return eyeTexReady;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, texEye);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, eyeImg);
+    gl.activeTexture(gl.TEXTURE0);
+    eyeTexReady = true;
+    return true;
+  }
 
   var texReady = false;
   var srcImg = document.querySelector('.layer.face');
@@ -280,6 +333,10 @@ window.FX = (function () {
     turn: 0,
     tilt: 0,
     under: 0,
+    eyeMode: 0,
+    eyeDur: 1.5,
+    gazeX: 0,
+    gazeY: 0,
     sat: 1.0,
     lens: 0,
     hi: 0,
@@ -298,6 +355,18 @@ window.FX = (function () {
     var elapsed = now - S.start;
     var t = elapsed / 1000;
 
+    if (S.eyeMode) {
+      var u = Math.min(1, t / S.eyeDur);
+      // 推近：前 80% 极慢，最后 20% 猛冲
+      S.zoom = u < 0.8 ? 1.0 + u * 0.1125 : 1.09 + ((u - 0.8) / 0.2) * 0.36;
+      // 眼珠：突然瞟走，再转回来盯你（硬跳，不做平滑）
+      var gx = 0, gy = 0;
+      if (u > 0.40 && u < 0.53) { gx = -0.30; gy = 0.16; }
+      else if (u > 0.75 && u < 0.81) { gx = 0.23; gy = -0.12; }
+      S.gazeX = gx;
+      S.gazeY = gy;
+    }
+
     if (S.script) S.script(t, elapsed);
 
     gl.uniform1f(U.uTime, t);
@@ -313,11 +382,21 @@ window.FX = (function () {
     gl.uniform4f(U.uGrade, S.sat, S.lens, S.hi, S.grain);
     gl.uniform3f(U.uTint, S.tint[0], S.tint[1], S.tint[2]);
     gl.uniform2f(U.uPulse, S.eyePulse, S.mouthPulse);
+    gl.uniform1f(U.uEyeMode, S.eyeMode);
+    gl.uniform2f(U.uGaze, S.gazeX, S.gazeY);
+    gl.uniform1i(U.uEyeTex, 1);
     gl.uniform1f(U.uTurn, S.turn);
     gl.uniform1f(U.uTilt, S.tilt);
     gl.uniform1f(U.uAudio, S.audio);
     gl.uniform2f(U.uPan, S.panX, S.panY);
 
+    if (S.eyeMode) {
+      uploadEye();
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, texEye);
+      gl.uniform1i(U.uEyeTex, 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -375,7 +454,8 @@ window.FX = (function () {
       S.grain = 0.055;
       S.audio = 0;
       S.panX = 0;
-      S.panY = 0.05;               // 画面略微上移，额头被切出框外
+      S.panY = 0.05;
+      S.eyeMode = 0;               // 画面略微上移，额头被切出框外
       S.script = null;
       canvas.style.transition = 'opacity .06s linear';
       canvas.style.opacity = '1';
@@ -477,6 +557,31 @@ window.FX = (function () {
         setTimeout(function () { S.active = false; }, 150);
       }, ms || 70);
       return true;
+    },
+
+    /* 眼睛特写：把平面的眼睛当球转 */
+    eyeStart: function (ms) {
+      resize();
+      uploadEye();
+      if (!eyeTexReady) return false;
+      S.active = true;
+      S.start = performance.now();
+      S.eyeMode = 1;
+      S.eyeDur = (ms || 1500) / 1000;
+      S.zoom = 1.0;
+      S.gazeX = 0;
+      S.gazeY = 0;
+      S.script = null;
+      canvas.style.transition = 'opacity .05s linear';
+      canvas.style.opacity = '1';
+      return true;
+    },
+
+    eyeStop: function () {
+      S.eyeMode = 0;
+      canvas.style.transition = 'opacity .12s linear';
+      canvas.style.opacity = '0';
+      setTimeout(function () { S.active = false; }, 150);
     },
 
     /* 供离线评测用：一次性设定所有视觉参数 */
