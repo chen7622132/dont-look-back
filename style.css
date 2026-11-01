@@ -669,3 +669,110 @@ body.crashing #crash::after {
   .breath { animation: none; }
   #scan::after { animation: none; opacity: .15; }
 }
+
+
+/* ============ 开场伪装：家用录像 ============ */
+#tape {
+  position: fixed; inset: 0; z-index: 19;
+  background: #000;
+  opacity: 0; visibility: hidden;
+  transition: opacity .45s ease;
+  overflow: hidden;
+}
+#tape.on { opacity: 1; visibility: visible; }
+
+#tape .tape-inner {
+  position: absolute; inset: 0;
+  animation: tapeBreath 9.5s ease-in-out infinite;
+  will-change: transform;
+}
+#tape .tape-inner img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: saturate(.94) contrast(1.02);
+  transform-origin: 50% 50%;
+}
+/* 极缓的手持呼吸：幅度小到像是人举着手机 */
+@keyframes tapeBreath {
+  0%, 100% { transform: scale(1.045) translate(0, 0); }
+  35%      { transform: scale(1.055) translate(-0.35%, 0.25%); }
+  70%      { transform: scale(1.05) translate(0.3%, -0.2%); }
+}
+
+#tape .tape-rec {
+  position: absolute; left: 16px; top: 14px;
+  display: flex; align-items: center; gap: 6px;
+  font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace;
+  color: rgba(255,255,255,.78);
+  letter-spacing: .12em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.55);
+}
+#tape .tape-rec i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #ff2b2b;
+  box-shadow: 0 0 7px rgba(255,43,43,.85);
+  animation: recBlink 1.7s steps(1, end) infinite;
+}
+@keyframes recBlink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: .12; } }
+
+#tape .tape-tc {
+  position: absolute; right: 16px; bottom: 16px;
+  font: 500 11px/1 ui-monospace, Menlo, Consolas, monospace;
+  color: rgba(255,255,255,.68);
+  letter-spacing: .07em;
+  text-shadow: 0 1px 4px rgba(0,0,0,.55);
+}
+
+#tape .tape-noise {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: .09;
+  background-image: radial-gradient(rgba(255,255,255,.10) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+}
+
+/* 卡顿：只错位、不改色。
+   真实的视频卡顿是"画面歪了一下、糊了一下"，不会整块变色 ——
+   把颜色压暗反而像"信号丢失/设备故障"，那是另一种恐怖，会提前暴露意图。 */
+#tape.stall .tape-inner {
+  animation: none;
+  transform: translateX(1.6%) scale(1.046);
+}
+#tape.stall .tape-inner img {
+  filter: saturate(.98) blur(.45px);
+}
+
+/* 第二次卡顿：错位更大、糊得更明显，恢复时画面上已经多了一样东西 */
+#tape.stall2 .tape-inner {
+  animation: none;
+  transform: translateX(-2.4%) scale(1.053);
+}
+#tape.stall2 .tape-inner img {
+  filter: saturate(.93) blur(1.1px);
+}
+
+/* 恢复后的残留：暗一点点、闷一点点，一秒后才褪干净 —— 像设备刚缓过来 */
+#tape.recovering .tape-inner img {
+  filter: brightness(.945) saturate(.93) blur(.25px);
+}
+
+/* 藏在阴影里的东西：multiply 混合让它在亮处消失、暗处才浮出来 */
+#tape .tape-something {
+  position: absolute;
+  right: -8%; bottom: 2%;
+  width: 40%;
+  /* 关键：一开始就在，只是淡到几乎看不见。
+     卡顿的作用不是"制造"它，而是"让注意力重新校准"，然后你才发现它一直都在。 */
+  opacity: .10;
+  mix-blend-mode: multiply;
+  filter: brightness(.5) contrast(1.05) blur(1.6px);
+  transition: opacity 4s ease, transform 5s ease;
+  pointer-events: none;
+  /* 径向遮罩把矩形边缘化开，否则一眼就看出是贴上去的一块图 */
+  -webkit-mask-image: radial-gradient(ellipse 58% 58% at 50% 50%, #000 28%, transparent 74%);
+  mask-image: radial-gradient(ellipse 58% 58% at 50% 50%, #000 28%, transparent 74%);
+}
+#tape .tape-something img { width: 100%; height: auto; display: block; }
+#tape.something .tape-something { opacity: .48; }
+#tape.something2 .tape-something { opacity: .78; transform: scale(1.06) translateY(-2%); }
