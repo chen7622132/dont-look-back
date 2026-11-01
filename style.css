@@ -486,7 +486,7 @@ body.crashing #crash::after {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: contrast(1.18) brightness(.92) saturate(.9);
+  filter: contrast(1.18) brightness(.85) saturate(.9);
   transform: scale(1);
 }
 
@@ -501,7 +501,7 @@ body.crashing #crash::after {
   opacity: 0;
   z-index: 2;
   animation: none !important;
-  filter: contrast(1.18) brightness(.92) saturate(.9) !important;
+  filter: contrast(1.18) brightness(.85) saturate(.9) !important;
 }
 
 #eyeShot.blinking .blink { opacity: 1; }
@@ -509,18 +509,21 @@ body.crashing #crash::after {
 /* 眨眼之后，睁开得比闭上慢 —— 真人的眼皮就是这样 */
 #eyeShot .blink { transition: opacity .04s linear; }
 
+/* 前 1.2 秒几乎不动（只是极慢地靠近 + 眼珠轻微移了一下），最后 0.3 秒猛推上来 */
 @keyframes eyePush {
-  0%   { transform: scale(1); }
-  55%  { transform: scale(1.05); }
-  80%  { transform: scale(1.09); }
-  100% { transform: scale(1.44); }
+  0%   { transform: scale(1) translate(0, 0); }
+  22%  { transform: scale(1.02) translate(-0.45%, 0.25%); }
+  40%  { transform: scale(1.035) translate(0.35%, -0.15%); }
+  58%  { transform: scale(1.05) translate(0, 0); }
+  80%  { transform: scale(1.09) translate(0, 0); }
+  100% { transform: scale(1.44) translate(0, 0); }
 }
 
 /* 猛推的那一下，瞳孔跟着一缩 —— 它发现你了 */
 @keyframes eyeTwitch {
-  0%, 74%   { filter: contrast(1.18) brightness(.92) saturate(.90); }
-  78%       { filter: contrast(1.60) brightness(1.35) saturate(1.20); }
-  82%, 100% { filter: contrast(1.18) brightness(.92) saturate(.90); }
+  0%, 74%   { filter: contrast(1.18) brightness(.85) saturate(.90); }
+  78%       { filter: contrast(1.60) brightness(1.28) saturate(1.20); }
+  82%, 100% { filter: contrast(1.18) brightness(.85) saturate(.90); }
 }
 
 /* ============ 引诱点 ============ */
