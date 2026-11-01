@@ -710,9 +710,9 @@
 
     knowEl.classList.add('on');
     audio.whisper(4.4);
-    later(function () { knowEl.querySelector('.k1').classList.add('show'); }, 150);
-    later(function () { knowEl.querySelector('.k2').classList.add('show'); }, 1150);
-    later(function () { knowEl.querySelector('.k3').classList.add('show'); }, 2150);
+    later(function () { knowEl.querySelector('.k1').classList.add('show'); }, 120);
+    later(function () { knowEl.querySelector('.k2').classList.add('show'); }, 820);
+    later(function () { knowEl.querySelector('.k3').classList.add('show'); }, 1500);
   }
 
   function endKnow() {
@@ -770,7 +770,7 @@
     later(function () {
       crashEl.classList.add('phase2');
       document.body.classList.remove('crashing');
-    }, 1500);
+    }, 1150);
   }
 
   function endCrash() {
@@ -1017,12 +1017,12 @@
     // 它记得你来过几次：第二次之后，不再给你准备的时间
     var fast = SEEN > 0;
     var T = fast
-      ? { dotOn: 100, dotOff: 820, emerge: 420, awake: 820, push: 1150, cut: 1700,
-          scare1: 2050, pre2: 3200, gap2: 1050,
-          know: 5200, crash: 9200, final: 13300, hunt: 17200 }
-      : { dotOn: 300, dotOff: 1480, emerge: 1350, awake: 1950, push: 2750, cut: 3700,
-          scare1: 4100, pre2: 5300, gap2: 1600,
-          know: 8700, crash: 12800, final: 16900, hunt: 20800 };
+      ? { dotOn: 80, dotOff: 700, emerge: 350, awake: 700, push: 980, cut: 1450,
+          scare1: 1750, pre2: 2750, gap2: 900,
+          know: 4300, crash: 7100, final: 10400, hunt: 13300 }
+      : { dotOn: 260, dotOff: 1250, emerge: 1120, awake: 1600, push: 2300, cut: 3080,
+          scare1: 3400, pre2: 4420, gap2: 1320,
+          know: 6750, crash: 9700, final: 13100, hunt: 15800 };
 
     // 引诱点：不是为了让你点，是为了让你凑近
     later(function () { dot.classList.add('on'); }, T.dotOn);
@@ -1081,7 +1081,7 @@
 
     later(function () {
       endKnow();
-    }, T.know + 3700);
+    }, T.know + 2600);
 
     // 假装坏了（这一段最贵：观众以为网站在崩溃，防备会完全放下）
     later(function () {
@@ -1091,7 +1091,7 @@
 
     later(function () {
       endCrash();
-    }, T.crash + 4000);
+    }, T.crash + 3200);
 
     // 最后一次，最狠的一次
     later(function () {
