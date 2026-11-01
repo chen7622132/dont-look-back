@@ -44,6 +44,15 @@
   } catch (e) { SEEN = 0; }
 
   var timers = [];
+  /* 重返者的"台词"：次数越多，它越不客气。
+     这是多周目恐怖最省力的做法 —— 不改任何机制，只让"它记得你"这件事变得更明确。 */
+  function comebackLine() {
+    if (SEEN >= 5) return '你每次都会回来。我知道。';
+    if (SEEN >= 3) return '你不用再来了 —— 但你会来。';
+    if (SEEN >= 1) return '第 ' + (SEEN + 1) + ' 次了，你还是回来了';
+    return '';
+  }
+
   function later(fn, ms) {
     var id = setTimeout(function () {
       timers = timers.filter(function (x) { return x !== id; });
@@ -606,6 +615,19 @@
     return raf2();
   }
 
+  /* 静默期的心跳：全黑里唯一还在动的东西。
+     Android 有 navigator.vibrate，iOS Safari 不支持 —— 不支持就静默跳过，不能报错。 */
+  function heartVibe(times) {
+    if (!navigator.vibrate) return;
+    var i = 0;
+    function beat() {
+      if (i++ >= times || R.dead) return;
+      try { navigator.vibrate([20]); } catch (e) { /* ignore */ }
+      later(beat, 1150);
+    }
+    later(beat, 250);
+  }
+
   function vibrate(power) {
     if (navigator.vibrate) {
       try {
@@ -735,6 +757,19 @@
       return;
     }
 
+    if (kind === 'freeze') {
+      // 信号卡住：反色 30ms → 正常 15ms → 反色 25ms，总共约 70ms。
+      // 比"闪一下"更像视频坏了 —— 人会先怀疑设备、再怀疑内容，那个空档最容易被打穿
+      audio.sting(0.10);
+      flash.classList.add('invert');
+      later(function () { flash.classList.remove('invert'); }, 30);
+      later(function () {
+        flash.classList.add('invert');
+        later(function () { flash.classList.remove('invert'); }, 25);
+      }, 45);
+      return;
+    }
+
     // 灯闪：光有了，东西没有。最便宜的假警报
     audio.sting(0.15);
     flash.style.transition = 'opacity .045s linear';
@@ -804,7 +839,7 @@
     knowEl.querySelector('.k1').textContent =
       (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日　' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     knowEl.querySelector('.k2').textContent =
-      SEEN > 0 ? '这是你第 ' + (SEEN + 1) + ' 次回来' : '第一次';
+      SEEN > 0 ? comebackLine() : '第一次';
     knowEl.querySelector('.k3').textContent = '你一个人在看。';
 
     knowEl.classList.add('on');
@@ -1094,9 +1129,7 @@
     setTimeout(function () {
       var l2 = endEl.querySelector('.l2');
       if (l2) {
-        l2.textContent = SEEN > 0
-          ? '第 ' + (SEEN + 1) + ' 次了，你还是回来了'
-          : '你已经回头了';
+        l2.textContent = SEEN > 0 ? comebackLine() : '你已经回头了';
       }
       endEl.classList.add('on');
       if (audio.ctx && audio.ctx.state === 'running') {
@@ -1204,6 +1237,7 @@
     // 硬切比渐弱可怕得多 —— 声音"被掐断"本身就是威胁信号
     later(function () {
       audio.suck();
+      heartVibe(3);              // 静默 3.3 秒里跳 3 下，正好把空档填满
       puppet.classList.remove('awake');
       puppet.style.transition = 'transform .45s ease, opacity .3s ease, filter .45s ease';
       setFace({ o: 0.02, br: 0.12, s: 1.17 });
@@ -1222,6 +1256,11 @@
       puppet.style.transition = '';
       puppet.classList.add('awake');
       setFace({ o: 0.25, br: 0.52, s: 1.1, tx: '0px', ty: '0px' });
+      // 卡帧假警报：先让信号"坏"一下，再真的从右边切进来
+      later(function () {
+        if (R.dead || R.busy) return;
+        falseAlarm('freeze');
+      }, T.gap2 - 420);
       later(function () {
         if (R.dead) return;
         scare({ from: 'right', power: 1.08, hold: 540 });
